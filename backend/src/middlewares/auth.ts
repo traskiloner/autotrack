@@ -5,6 +5,7 @@ export interface AuthenticatedRequest extends Request {
   user?: {
     id: number;
     username: string;
+    role: string;
   };
 }
 
@@ -19,7 +20,7 @@ export function authMiddleware(req: AuthenticatedRequest, res: Response, next: N
 
   try {
     const secret = process.env.JWT_SECRET || 'super_secret_key_change_me_123';
-    const decoded = jwt.verify(token, secret) as { id: number; username: string };
+    const decoded = jwt.verify(token, secret) as { id: number; username: string; role: string };
     
     req.user = decoded;
     next();
@@ -27,3 +28,11 @@ export function authMiddleware(req: AuthenticatedRequest, res: Response, next: N
     res.status(401).json({ message: 'Token is not valid' });
   }
 }
+
+export function adminMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Acceso denegado, se requieren permisos de administrador' });
+  }
+  next();
+}
+

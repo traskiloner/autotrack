@@ -3,14 +3,24 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { initDb } from './db';
-import { register, login } from './controllers/authController';
+import { register, login, updateProfile } from './controllers/authController';
 import { getCars, getCarById, createCar, updateCar, deleteCar } from './controllers/carController';
 import { getMaintenances, createMaintenance, deleteMaintenance, getAllMaintenances } from './controllers/maintenanceController';
 import { getInventory, createInventoryPart, updateInventoryPart, deleteInventoryPart } from './controllers/inventoryController';
 import { getUserAlerts, getCarAlerts, createAlert, completeAlert, deleteAlert } from './controllers/alertController';
 import { upload, handleUpload } from './controllers/uploadController';
 import { getCarFuelLogs, createFuelLog, deleteFuelLog } from './controllers/fuelController';
-import { authMiddleware } from './middlewares/auth';
+import { authMiddleware, adminMiddleware } from './middlewares/auth';
+import {
+  checkAdminSetup,
+  setupInitialAdmin,
+  getGlobalStats,
+  getAllUsers,
+  adminCreateUser,
+  adminUpdateUser,
+  adminDeleteUser,
+  getAllCars
+} from './controllers/adminController';
 
 dotenv.config();
 
@@ -28,6 +38,18 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 // Auth Routes
 app.post('/api/auth/register', register);
 app.post('/api/auth/login', login);
+app.put('/api/users/profile', authMiddleware, updateProfile);
+
+
+// Admin Routes
+app.get('/api/admin/setup-check', checkAdminSetup);
+app.post('/api/admin/setup', setupInitialAdmin);
+app.get('/api/admin/stats', authMiddleware, adminMiddleware, getGlobalStats);
+app.get('/api/admin/users', authMiddleware, adminMiddleware, getAllUsers);
+app.post('/api/admin/users', authMiddleware, adminMiddleware, adminCreateUser);
+app.put('/api/admin/users/:id', authMiddleware, adminMiddleware, adminUpdateUser);
+app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, adminDeleteUser);
+app.get('/api/admin/cars', authMiddleware, adminMiddleware, getAllCars);
 
 // Car Routes (Protected)
 app.get('/api/cars', authMiddleware, getCars);
@@ -62,6 +84,7 @@ app.delete('/api/fuel/:id', authMiddleware, deleteFuelLog);
 
 // Upload Route (Protected)
 app.post('/api/upload', authMiddleware, upload.single('file'), handleUpload);
+
 
 // Health check
 app.get('/health', (req, res) => {

@@ -4,16 +4,18 @@ import { Auth } from './pages/Auth';
 import { Dashboard } from './pages/Dashboard';
 import { CarDetail } from './pages/CarDetail';
 import { Inventory } from './pages/Inventory';
+import { AdminPanel } from './pages/AdminPanel';
+import { Profile } from './pages/Profile';
 import { Loader2, LogOut } from 'lucide-react';
 
 const MainLayout: React.FC = () => {
   const { isAuthenticated, user, logout, loading } = useAuth();
-  const [currentTab, setCurrentTab] = useState<'cars' | 'inventory'>('cars');
+  const [currentTab, setCurrentTab] = useState<'cars' | 'inventory' | 'admin' | 'profile'>('cars');
   const [selectedCarId, setSelectedCarId] = useState<number | null>(null);
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100%vh', height: '100vh' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', height: '100vh' }}>
         <Loader2 className="animate-spin" size={48} style={{ color: 'var(--primary)', marginBottom: '16px' }} />
         <p style={{ color: 'var(--text-secondary)' }}>Cargando garaje...</p>
       </div>
@@ -52,11 +54,29 @@ const MainLayout: React.FC = () => {
                   Inventario de Piezas
                 </span>
               </li>
+              <li>
+                <span 
+                  className={`nav-link ${currentTab === 'profile' ? 'active' : ''}`}
+                  onClick={() => { setCurrentTab('profile'); }}
+                >
+                  Mi Perfil
+                </span>
+              </li>
+              {user?.role === 'admin' && (
+                <li>
+                  <span 
+                    className={`nav-link ${currentTab === 'admin' ? 'active' : ''}`}
+                    onClick={() => { setCurrentTab('admin'); setSelectedCarId(null); }}
+                  >
+                    🛡️ Administración
+                  </span>
+                </li>
+              )}
             </ul>
           </div>
           
           <div className="nav-user">
-            <span>Bienvenido, <strong>{user?.username}</strong></span>
+            <span>Bienvenido, <strong style={{ cursor: 'pointer' }} onClick={() => setCurrentTab('profile')} title="Ver mi perfil">{user?.username}</strong></span>
             <button className="btn-secondary btn-icon" onClick={logout} title="Cerrar sesión">
               <LogOut size={18} />
             </button>
@@ -66,7 +86,11 @@ const MainLayout: React.FC = () => {
 
       {/* Main Tab Render */}
       <div style={{ flexGrow: 1 }}>
-        {currentTab === 'cars' ? (
+        {currentTab === 'admin' ? (
+          <AdminPanel />
+        ) : currentTab === 'profile' ? (
+          <Profile />
+        ) : currentTab === 'cars' ? (
           selectedCarId !== null ? (
             <CarDetail carId={selectedCarId} onBack={() => setSelectedCarId(null)} />
           ) : (

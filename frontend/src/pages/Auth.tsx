@@ -1,23 +1,42 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Mail, Lock, User, AlertCircle } from 'lucide-react';
+import { Mail, Lock, User, AlertCircle, ShieldAlert } from 'lucide-react';
 
 export const Auth: React.FC = () => {
   const { login, registerUser, apiFetch } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
+  const [setupRequired, setSetupRequired] = useState(false);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const checkSetup = async () => {
+      try {
+        const res = await apiFetch('/api/admin/setup-check');
+        if (res && res.setupRequired) {
+          setSetupRequired(true);
+        }
+      } catch (err) {
+        console.error('Error checking admin setup:', err);
+      }
+    };
+    checkSetup();
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
-    const path = isLogin ? '/api/auth/login' : '/api/auth/register';
-    const body = isLogin 
+    let path = isLogin ? '/api/auth/login' : '/api/auth/register';
+    if (setupRequired) {
+      path = '/api/admin/setup';
+    }
+
+    const body = (isLogin && !setupRequired)
       ? { email, password } 
       : { username, email, password };
 
@@ -27,9 +46,10 @@ export const Auth: React.FC = () => {
         body: JSON.stringify(body),
       });
 
-      if (isLogin) {
+      if (isLogin && !setupRequired) {
         login(data.token, data.user);
       } else {
+        // Registering regular user or initial admin setup
         registerUser(data.token, data.user);
       }
     } catch (err: any) {
@@ -49,9 +69,21 @@ export const Auth: React.FC = () => {
         </div>
 
         <div className="glass-card">
-          <h2 style={{ marginBottom: '24px', textAlign: 'center' }}>
-            {isLogin ? 'Iniciar Sesión' : 'Crear Cuenta'}
-          </h2>
+          {setupRequired ? (
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <div style={{ display: 'inline-flex', padding: '12px', borderRadius: '50%', background: 'rgba(255, 179, 0, 0.1)', border: '1px solid rgba(255, 179, 0, 0.2)', color: 'var(--warning)', marginBottom: '12px' }}>
+                <ShieldAlert size={28} />
+              </div>
+              <h2 style={{ marginBottom: '8px' }}>Inicializar Superusuario</h2>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', lineHeight: '1.4' }}>
+                No hay ninguna cuenta de administrador en el sistema. Crea el superusuario inicial para comenzar.
+              </p>
+            </div>
+          ) : (
+            <h2 style={{ marginBottom: '24px', textAlign: 'center' }}>
+              {isLogin ? 'Iniciar Sesión' : 'Crear Cuenta'}
+            </h2>
+          )}
 
           {error && (
             <div 
@@ -75,9 +107,9 @@ export const Auth: React.FC = () => {
           )}
 
           <form onSubmit={handleSubmit}>
-            {!isLogin && (
+            {(!isLogin || setupRequired) && (
               <div className="form-group">
-                <label htmlFor="username">Nombre de usuario</label>
+                <label htmlFor="username">Nombre de usuario administrador</label>
                 <div style={{ position: 'relative' }}>
                   <User 
                     size={18} 
@@ -93,11 +125,11 @@ export const Auth: React.FC = () => {
                     type="text"
                     id="username"
                     className="form-control"
-                    placeholder="Tu apodo"
+                    placeholder="ej. admin"
                     style={{ paddingLeft: '48px', width: '100%' }}
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    required={!isLogin}
+                    required={!isLogin || setupRequired}
                   />
                 </div>
               </div>
@@ -161,24 +193,27 @@ export const Auth: React.FC = () => {
               style={{ width: '100%', padding: '14px' }}
               disabled={loading}
             >
-              {loading ? 'Cargando...' : isLogin ? 'Entrar' : 'Registrarse'}
+              {loading ? 'Cargando...' : setupRequired ? 'Crear Superusuario' : isLogin ? 'Entrar' : 'Registrarse'}
             </button>
           </form>
 
-          <div className="auth-toggle">
-            {isLogin ? '¿No tienes cuenta?' : '¿Ya tienes cuenta?'}
-            <span 
-              className="auth-toggle-link" 
-              onClick={() => {
-                setIsLogin(!isLogin);
-                setError(null);
-              }}
-            >
-              {isLogin ? 'Regístrate aquí' : 'Inicia sesión'}
-            </span>
-          </div>
+          {!setupRequired && (
+            <div className="auth-toggle">
+              {isLogin ? '¿No tienes cuenta?' : '¿Ya tienes cuenta?'}
+              <span 
+                className="auth-toggle-link" 
+                onClick={() => {
+                  setIsLogin(!isLogin);
+                  setError(null);
+                }}
+              >
+                {isLogin ? 'Regístrate aquí' : 'Inicia sesión'}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 };
+

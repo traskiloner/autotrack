@@ -88,3 +88,11 @@ export interface FuelLog {
   created_at?: string;
 }
 
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+  role?: string;
+}
+
+
