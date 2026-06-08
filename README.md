@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Autotrack - Gestor de Mantenimiento de Vehículos
 
 Autotrack es una solución web premium y robusta diseñada para el seguimiento exhaustivo del mantenimiento de flotas de vehículos o coches personales. Permite registrar mantenimientos, gestionar alertas de revisiones anuales o por kilometraje, y controlar el inventario de piezas de recambio asociándolas directamente a los registros de mantenimiento con decremento automático de stock.
@@ -154,3 +155,6 @@ Cuando se registra un nuevo mantenimiento y se vincula una pieza del inventario 
 4. Actualiza el kilometraje global del vehículo en la tabla `cars` si el kilometraje del mantenimiento registrado es superior al actual.
 
 Al eliminar un mantenimiento, se realiza la acción inversa: se recalculan las cantidades y se **restaura el stock original** de las piezas vinculadas al inventario de forma segura antes de remover la revisión.
+=======
+# autotrack
+>>>>>>> fc31f499bf5e8500a22b6a3f86d181638337b4fe
