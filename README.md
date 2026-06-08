@@ -1,11 +1,26 @@
-<<<<<<< HEAD
 # Autotrack - Gestor de Mantenimiento de Vehículos
 
-Autotrack es una solución web premium y robusta diseñada para el seguimiento exhaustivo del mantenimiento de flotas de vehículos o coches personales. Permite registrar mantenimientos, gestionar alertas de revisiones anuales o por kilometraje, y controlar el inventario de piezas de recambio asociándolas directamente a los registros de mantenimiento con decremento automático de stock.
+Autotrack es una solución web premium y robusta creada con **Google Antigravity**. Su funcionalidad principal es ayudar a que las personas puedan registrar y hacer un seguimiento detallado del mantenimiento, coste y estado de sus vehículos o coches personales de forma centralizada.
+
+La plataforma permite gestionar mantenimientos con checklists dinámicos, realizar el seguimiento del consumo de combustible, proyectar estimaciones predictivas de kilometraje, subir y previsualizar facturas (PDF/Imágenes), controlar piezas de recambio en stock y administrar cuentas de usuario desde un portal de superusuario.
 
 ---
 
-## 1. Arquitectura del Proyecto (Monorepo)
+## 1. Características Principales
+
+1.  **Gestión de Vehículos**: Registro de especificaciones técnicas (modelo, año, código de motor, medidas de neumáticos, etc.) y kilometraje activo.
+2.  **Registro de Mantenimientos**: Historial detallado de revisiones, vinculación de repuestos y cálculo automático de costos.
+3.  **Control de Consumo de Combustible**: Módulo para registrar repostajes y obtener estadísticas avanzadas de medias de consumo (L/100km), coste medio de combustible (€/L) y kilometraje por tiempo (km/mes, €/mes).
+4.  **Hitos Predictivos del Odómetro**: Predicción automática de las fechas de vencimiento de las alertas de mantenimiento basadas en el comportamiento real de conducción (km diarios estimados).
+5.  **Checklists Dinámicos**: Plantillas precargadas y modificables en tiempo real para agilizar el registro de mantenimientos (Frenos, Pre-ITV, Aceites, Mantenimiento Anual).
+6.  **Visor de Facturas Integrado**: Visualización directa en ventana modal de recibos en formato PDF e imágenes (JPG, PNG, WEBP).
+7.  **Inventario Transaccional**: Reducción automática de stock en el inventario de repuestos al asociarlos a un mantenimiento, con restauración automática en caso de eliminación.
+8.  **Portal de Administración**: Vista de superusuario para ver estadísticas globales del sistema y realizar operaciones CRUD (crear, editar, borrar y reasignar roles) sobre las cuentas de usuario.
+9.  **Mi Perfil**: Sección para que cualquier usuario pueda autogestionar su nombre de usuario, email y contraseña.
+
+---
+
+## 2. Arquitectura del Proyecto (Monorepo)
 
 El proyecto está estructurado como un **monorepo de npm** organizado mediante workspaces para facilitar la reutilización de código y tipos TypeScript:
 
@@ -31,15 +46,15 @@ autotrack-monorepo/
 ```
 
 ### Paquetes del Workspace
-*   **`@autotrack/shared`**: Paquete de tipos puros. Define interfaces clave (`CarData`, `Maintenance`, `Part`, `InventoryPart`, `AlertData`, `MaintenanceData`) que usan de forma idéntica tanto la API como el cliente web.
-*   **`autotrack-backend`**: Servidor API Express. Maneja la lógica de autenticación JWT, registro de vehículos, carga de facturas físicas/documentos en PDF con `multer`, y transacciones del inventario.
-*   **`autotrack-frontend`**: SPA desarrollada con React, Vite y Lucide React. Su diseño emplea una estética moderna y oscura (glassmorphism, micro-animaciones en botones y gráficos de coste interactivos).
+*   **`@autotrack/shared`**: Contiene las interfaces y definiciones comunes (`CarData`, `Maintenance`, `Part`, `InventoryPart`, `AlertData`, `MaintenanceData`, `FuelLog`, `User`) utilizadas tanto por la API del servidor como por la app cliente.
+*   **`autotrack-backend`**: Servidor API Express. Implementa enrutamiento seguro, autenticación JWT, registro de uploads físicos de facturas con `multer`, transacciones del inventario con Prisma y endpoints de administración protegidos.
+*   **`autotrack-frontend`**: SPA desarrollada en React y TypeScript con estilos premium en Dark Mode (glassmorphism, gráficos de consumo interactivos y micro-animaciones interactivas).
 
 ---
 
-## 2. Infraestructura y Redes (Docker)
+## 3. Infraestructura y Redes (Docker)
 
-La infraestructura está totalmente aislada de la red externa a través de la red interna de Docker, exponiendo **únicamente el puerto 80** a internet.
+La infraestructura está aislada a través de la red interna de Docker, exponiendo **únicamente el puerto 80** a internet en el host local.
 
 ### Flujo de Red de las Peticiones
 
@@ -62,16 +77,16 @@ graph TD
 
 > [!IMPORTANT]
 > **Seguridad y Puertos Internos**  
-> Ninguno de los contenedores de aplicación (`frontend`, `backend`, `db`) expone puertos hacia la máquina host. Esto significa que servicios vulnerables como la base de datos o el motor de ejecución Node están completamente protegidos ante ataques de escaneo de puertos externos. El único punto de entrada es el `gateway` Nginx, el cual enruta el tráfico interno de forma segura.
+> Ninguno de los contenedores de aplicación (`frontend`, `backend`, `db`) expone puertos hacia la máquina host. El único punto de entrada es el `gateway` Nginx, el cual enruta el tráfico interno de forma segura.
 
 ---
 
-## 3. Base de Datos y ORM (Prisma v7)
+## 4. Base de Datos y ORM (Prisma v7)
 
 La base de datos utiliza PostgreSQL. Para interactuar con ella se utiliza **Prisma ORM (v7)** a través de un adaptador nativo de consultas.
 
 ### Configuración de Prisma 7
-En Prisma 7, la dirección de conexión no se escribe en `schema.prisma`. Se administra centralizadamente en `prisma.config.ts` y se pasa un adaptador en la inicialización:
+En Prisma 7, la dirección de conexión se administra en `prisma.config.ts` y se pasa un adaptador en la inicialización:
 
 ```typescript
 // backend/src/db/index.ts
@@ -91,31 +106,39 @@ Todos los modelos de base de datos están configurados en [schema.prisma](file:/
 
 | Modelo Prisma | Tabla de PostgreSQL | Relaciones | Descripción |
 | :--- | :--- | :--- | :--- |
-| `User` | `users` | `1:N` con `Car`, `InventoryPart` | Datos de cuenta de usuarios y contraseñas hasheadas. |
-| `Car` | `cars` | `N:1` con `User`, `1:N` con `Maintenance`, `Alert` | Vehículos registrados, kilometraje y especificaciones técnicas. |
+| `User` | `users` | `1:N` con `Car`, `InventoryPart` | Cuentas de usuario con campos de nombre, email, contraseña hasheada y rol. |
+| `Car` | `cars` | `N:1` con `User`, `1:N` con `Maintenance`, `Alert`, `FuelLog` | Vehículos registrados, kilometraje y especificaciones técnicas. |
 | `Maintenance` | `maintenances` | `N:1` con `Car`, `1:N` con `Part` | Revisiones de mantenimiento, facturas en PDF y checklists. |
 | `Part` | `parts` | `N:1` con `Maintenance`, `N:1` con `InventoryPart` (Opcional) | Piezas asociadas a un servicio de mantenimiento específico. |
-| `InventoryPart`| `inventory_parts` | `N:1` con `User`, `1:N` con `Part` | Stock disponible y precios de repuestos listos para usar. |
+| `InventoryPart`| `inventory_parts` | `N:1` con `User`, `1:N` con `Part` | Stock disponible y precios de repuestos en almacén. |
 | `MaintenanceAlert`| `maintenance_alerts`| `N:1` con `Car` | Recordatorios periódicos por fecha o por km. |
+| `FuelLog` | `fuel_logs` | `N:1` con `Car` | Registros de repostajes (litros, coste total y estado de llenado) para consumos medios. |
 
 ---
 
-## 4. Guía de Inicio Rápido
+## 5. Guía de Inicio Rápido
 
 ### Requisitos Previos
 *   **Docker** y **Docker Compose**
 *   **Node.js v20+** y **npm** (para desarrollo local)
 
+### Configuración de Archivos de Entorno
+Copia el archivo `.env.example` para crear tu configuración local:
+```bash
+cp .env.example .env
+cp backend/.env.example backend/.env
+```
+
 ### Despliegue en Producción (Docker)
 
 Para construir e iniciar toda la infraestructura (incluyendo la inicialización automática de tablas y sincronización de base de datos en el primer arranque):
 
-1. Clona el repositorio.
-2. Inicia los contenedores:
+1. Inicia los contenedores:
    ```bash
    docker compose up -d --build
    ```
-3. Accede al sistema desde tu navegador en: **`http://localhost/`**
+2. Accede al sistema desde tu navegador en: **`http://localhost/`**
+3. **Primer Inicio (Superusuario)**: El sistema detectará que no hay administradores y te guiará para configurar la cuenta de superusuario inicial del sistema.
 
 ### Desarrollo Local (Modo Híbrido)
 
@@ -142,19 +165,3 @@ Si deseas realizar modificaciones en caliente sin reconstruir los contenedores:
    npm run dev -w frontend
    ```
    *Nota: En desarrollo local en el puerto 5173, la aplicación del frontend se comunicará automáticamente con la API en `http://localhost:5001`.*
-
----
-
-## 5. Detalles de la Lógica del Código
-
-### Transaccionalidad de Stock (Mantenimiento e Inventario)
-Cuando se registra un nuevo mantenimiento y se vincula una pieza del inventario (`inventory_part_id`), el controlador realiza una transacción en la base de datos (`prisma.$transaction`) que ejecuta secuencialmente:
-1. Crea el registro en la tabla `maintenances`.
-2. Asocia y guarda la pieza en `parts`.
-3. Decrementa la cantidad indicada del stock de la pieza en `inventory_parts` (evitando valores negativos usando límites programáticos).
-4. Actualiza el kilometraje global del vehículo en la tabla `cars` si el kilometraje del mantenimiento registrado es superior al actual.
-
-Al eliminar un mantenimiento, se realiza la acción inversa: se recalculan las cantidades y se **restaura el stock original** de las piezas vinculadas al inventario de forma segura antes de remover la revisión.
-=======
-# autotrack
->>>>>>> fc31f499bf5e8500a22b6a3f86d181638337b4fe
