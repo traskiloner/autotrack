@@ -5,6 +5,7 @@ pipeline {
         string(name: 'DOCKER_HUB_USER', defaultValue: 'traskiloner', description: 'Usuario o Organización de Docker Hub')
         string(name: 'REPO_BACKEND', defaultValue: 'autotrack-backend', description: 'Nombre del repositorio de Docker Hub para el Backend')
         string(name: 'REPO_FRONTEND', defaultValue: 'autotrack-frontend', description: 'Nombre del repositorio de Docker Hub para el Frontend')
+        string(name: 'REPO_GATEWAY', defaultValue: 'autotrack-gateway', description: 'Nombre del repositorio de Docker Hub para el Gateway')
     }
 
     environment {
@@ -12,6 +13,7 @@ pipeline {
         DOCKER_HUB_USER = "${params.DOCKER_HUB_USER ?: 'traskiloner'}"
         REPO_BACKEND = "${params.REPO_BACKEND ?: 'autotrack-backend'}"
         REPO_FRONTEND = "${params.REPO_FRONTEND ?: 'autotrack-frontend'}"
+        REPO_GATEWAY = "${params.REPO_GATEWAY ?: 'autotrack-gateway'}"
         
         // Identificador de las credenciales de Docker Hub configuradas en Jenkins
         DOCKER_HUB_CREDS_ID = 'docker-hub-credentials'
@@ -41,13 +43,17 @@ pipeline {
                     // Determinar el tag correspondiente (si hay un tag de Git se usa, de lo contrario se usa el commit SHA)
                     def targetTag = env.TAG_NAME ?: env.COMMIT_SHA
 
-                    // 1. CONSTRUIR Y ETIQUETAR BACKEND (compilado directo con múltiples tags)
+                    // 1. CONSTRUIR Y ETIQUETAR BACKEND
                     echo 'Construyendo y etiquetando imagen del Backend...'
                     sh "docker build -t ${DOCKER_HUB_USER}/${REPO_BACKEND}:${targetTag} -t ${DOCKER_HUB_USER}/${REPO_BACKEND}:latest -f backend/Dockerfile ."
                     
-                    // 2. CONSTRUIR Y ETIQUETAR FRONTEND (compilado directo con múltiples tags)
+                    // 2. CONSTRUIR Y ETIQUETAR FRONTEND
                     echo 'Construyendo y etiquetando imagen del Frontend...'
                     sh "docker build -t ${DOCKER_HUB_USER}/${REPO_FRONTEND}:${targetTag} -t ${DOCKER_HUB_USER}/${REPO_FRONTEND}:latest -f frontend/Dockerfile ."
+
+                    // 3. CONSTRUIR Y ETIQUETAR GATEWAY
+                    echo 'Construyendo y etiquetando imagen del Gateway Nginx...'
+                    sh "docker build -t ${DOCKER_HUB_USER}/${REPO_GATEWAY}:${targetTag} -t ${DOCKER_HUB_USER}/${REPO_GATEWAY}:latest -f gateway/Dockerfile ."
                 }
             }
         }
@@ -65,10 +71,12 @@ pipeline {
                     // Subir versión específica
                     sh "docker push ${DOCKER_HUB_USER}/${REPO_BACKEND}:${targetTag}"
                     sh "docker push ${DOCKER_HUB_USER}/${REPO_FRONTEND}:${targetTag}"
+                    sh "docker push ${DOCKER_HUB_USER}/${REPO_GATEWAY}:${targetTag}"
                     
                     // Subir tag latest
                     sh "docker push ${DOCKER_HUB_USER}/${REPO_BACKEND}:latest"
                     sh "docker push ${DOCKER_HUB_USER}/${REPO_FRONTEND}:latest"
+                    sh "docker push ${DOCKER_HUB_USER}/${REPO_GATEWAY}:latest"
                 }
             }
         }
@@ -82,6 +90,8 @@ pipeline {
                     sh "docker rmi ${DOCKER_HUB_USER}/${REPO_BACKEND}:latest || true"
                     sh "docker rmi ${DOCKER_HUB_USER}/${REPO_FRONTEND}:${targetTag} || true"
                     sh "docker rmi ${DOCKER_HUB_USER}/${REPO_FRONTEND}:latest || true"
+                    sh "docker rmi ${DOCKER_HUB_USER}/${REPO_GATEWAY}:${targetTag} || true"
+                    sh "docker rmi ${DOCKER_HUB_USER}/${REPO_GATEWAY}:latest || true"
                 }
             }
         }
