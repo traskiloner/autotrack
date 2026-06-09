@@ -36,19 +36,9 @@ services:
     image: traskiloner/autotrack-frontend:latest
     container_name: autotrack_frontend
     restart: always
-    depends_on:
-      - backend
-    networks:
-      - autotrack_network
-
-  gateway:
-    image: traskiloner/autotrack-gateway:latest
-    container_name: autotrack_gateway
-    restart: always
     ports:
-      - "80:80"
+      - "4080:80"
     depends_on:
-      - frontend
       - backend
     networks:
       - autotrack_network
