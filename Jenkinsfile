@@ -38,28 +38,16 @@ pipeline {
         stage('Compilar y Etiquetar Imágenes') {
             steps {
                 script {
-                    // 1. CONSTRUIR BACKEND (usando el contexto de la raíz para acceder al paquete shared)
-                    echo 'Construyendo imagen del Backend...'
-                    sh "docker build -t ${DOCKER_HUB_USER}/${REPO_BACKEND}:${env.COMMIT_SHA} -f backend/Dockerfile ."
-                    
-                    // 2. CONSTRUIR FRONTEND (usando el contexto de la raíz para acceder al paquete shared)
-                    echo 'Construyendo imagen del Frontend...'
-                    sh "docker build -t ${DOCKER_HUB_USER}/${REPO_FRONTEND}:${env.COMMIT_SHA} -f frontend/Dockerfile ."
+                    // Determinar el tag correspondiente (si hay un tag de Git se usa, de lo contrario se usa el commit SHA)
+                    def targetTag = env.TAG_NAME ?: env.COMMIT_SHA
 
-                    // 3. ETIQUETAR SEGÚN EL DISPARADOR
-                    if (env.TAG_NAME) {
-                        // Si se disparó por un Git Tag (ej. v1.0.0), etiquetamos con esa versión
-                        sh "docker tag ${DOCKER_HUB_USER}/${REPO_BACKEND}:${env.COMMIT_SHA} ${DOCKER_HUB_USER}/${REPO_BACKEND}:${env.TAG_NAME}"
-                        sh "docker tag ${DOCKER_HUB_USER}/${REPO_FRONTEND}:${env.COMMIT_SHA} ${DOCKER_HUB_USER}/${REPO_FRONTEND}:${env.TAG_NAME}"
-                        
-                        // Opcionalmente, etiquetamos también como latest si es una etiqueta de versión estable
-                        sh "docker tag ${DOCKER_HUB_USER}/${REPO_BACKEND}:${env.COMMIT_SHA} ${DOCKER_HUB_USER}/${REPO_BACKEND}:latest"
-                        sh "docker tag ${DOCKER_HUB_USER}/${REPO_FRONTEND}:${env.COMMIT_SHA} ${DOCKER_HUB_USER}/${REPO_FRONTEND}:latest"
-                    } else if (env.BRANCH_NAME == 'main') {
-                        // Si se compiló la rama main por un commit regular, etiquetamos como latest
-                        sh "docker tag ${DOCKER_HUB_USER}/${REPO_BACKEND}:${env.COMMIT_SHA} ${DOCKER_HUB_USER}/${REPO_BACKEND}:latest"
-                        sh "docker tag ${DOCKER_HUB_USER}/${REPO_FRONTEND}:${env.COMMIT_SHA} ${DOCKER_HUB_USER}/${REPO_FRONTEND}:latest"
-                    }
+                    // 1. CONSTRUIR Y ETIQUETAR BACKEND (compilado directo con múltiples tags)
+                    echo 'Construyendo y etiquetando imagen del Backend...'
+                    sh "docker build -t ${DOCKER_HUB_USER}/${REPO_BACKEND}:${targetTag} -t ${DOCKER_HUB_USER}/${REPO_BACKEND}:latest -f backend/Dockerfile ."
+                    
+                    // 2. CONSTRUIR Y ETIQUETAR FRONTEND (compilado directo con múltiples tags)
+                    echo 'Construyendo y etiquetando imagen del Frontend...'
+                    sh "docker build -t ${DOCKER_HUB_USER}/${REPO_FRONTEND}:${targetTag} -t ${DOCKER_HUB_USER}/${REPO_FRONTEND}:latest -f frontend/Dockerfile ."
                 }
             }
         }
@@ -72,23 +60,15 @@ pipeline {
                 }
                 
                 script {
-                    // Subir versión identificada por el hash de commit
-                    sh "docker push ${DOCKER_HUB_USER}/${REPO_BACKEND}:${env.COMMIT_SHA}"
-                    sh "docker push ${DOCKER_HUB_USER}/${REPO_FRONTEND}:${env.COMMIT_SHA}"
+                    def targetTag = env.TAG_NAME ?: env.COMMIT_SHA
+
+                    // Subir versión específica
+                    sh "docker push ${DOCKER_HUB_USER}/${REPO_BACKEND}:${targetTag}"
+                    sh "docker push ${DOCKER_HUB_USER}/${REPO_FRONTEND}:${targetTag}"
                     
-                    if (env.TAG_NAME) {
-                        // Subir versión específica del tag de Git
-                        sh "docker push ${DOCKER_HUB_USER}/${REPO_BACKEND}:${env.TAG_NAME}"
-                        sh "docker push ${DOCKER_HUB_USER}/${REPO_FRONTEND}:${env.TAG_NAME}"
-                        
-                        // Subir latest
-                        sh "docker push ${DOCKER_HUB_USER}/${REPO_BACKEND}:latest"
-                        sh "docker push ${DOCKER_HUB_USER}/${REPO_FRONTEND}:latest"
-                    } else if (env.BRANCH_NAME == 'main') {
-                        // Subir latest
-                        sh "docker push ${DOCKER_HUB_USER}/${REPO_BACKEND}:latest"
-                        sh "docker push ${DOCKER_HUB_USER}/${REPO_FRONTEND}:latest"
-                    }
+                    // Subir tag latest
+                    sh "docker push ${DOCKER_HUB_USER}/${REPO_BACKEND}:latest"
+                    sh "docker push ${DOCKER_HUB_USER}/${REPO_FRONTEND}:latest"
                 }
             }
         }
@@ -96,14 +76,12 @@ pipeline {
         stage('Limpieza Local') {
             steps {
                 script {
+                    def targetTag = env.TAG_NAME ?: env.COMMIT_SHA
                     // Eliminar imágenes locales construidas para no llenar el disco del servidor de Jenkins
-                    sh "docker rmi ${DOCKER_HUB_USER}/${REPO_BACKEND}:${env.COMMIT_SHA} || true"
-                    sh "docker rmi ${DOCKER_HUB_USER}/${REPO_FRONTEND}:${env.COMMIT_SHA} || true"
-                    
-                    if (env.TAG_NAME) {
-                        sh "docker rmi ${DOCKER_HUB_USER}/${REPO_BACKEND}:${env.TAG_NAME} || true"
-                        sh "docker rmi ${DOCKER_HUB_USER}/${REPO_FRONTEND}:${env.TAG_NAME} || true"
-                    }
+                    sh "docker rmi ${DOCKER_HUB_USER}/${REPO_BACKEND}:${targetTag} || true"
+                    sh "docker rmi ${DOCKER_HUB_USER}/${REPO_BACKEND}:latest || true"
+                    sh "docker rmi ${DOCKER_HUB_USER}/${REPO_FRONTEND}:${targetTag} || true"
+                    sh "docker rmi ${DOCKER_HUB_USER}/${REPO_FRONTEND}:latest || true"
                 }
             }
         }
