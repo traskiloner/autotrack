@@ -114,13 +114,29 @@ export async function getGlobalStats(req: AuthenticatedRequest, res: Response) {
 
     const partsCount = await prisma.part.count();
 
+    // Additional statistics
+    const activeUsersCount = await prisma.user.count({ where: { is_active: true } });
+    const disabledUsersCount = await prisma.user.count({ where: { is_active: false } });
+    const totalShares = await prisma.carShare.count();
+    
+    const loginAggregation = await prisma.user.aggregate({
+      _avg: {
+        login_count: true
+      }
+    });
+    const avgLogins = Number(loginAggregation._avg.login_count || 0);
+
     res.json({
       totalUsers,
       totalCars,
       totalFuelLogs,
       totalMaintenanceCost,
       totalInventoryStock,
-      partsCount
+      partsCount,
+      activeUsersCount,
+      disabledUsersCount,
+      totalShares,
+      avgLogins
     });
   } catch (err) {
     console.error('Error getting global statistics:', err);
@@ -137,6 +153,10 @@ export async function getAllUsers(req: AuthenticatedRequest, res: Response) {
         username: true,
         email: true,
         role: true,
+        is_active: true,
+        login_count: true,
+        last_login_ip: true,
+        last_login_at: true,
         created_at: true,
         _count: {
           select: {
@@ -208,7 +228,7 @@ export async function adminCreateUser(req: AuthenticatedRequest, res: Response) 
 // 6. Update user (Admin only)
 export async function adminUpdateUser(req: AuthenticatedRequest, res: Response) {
   const { id } = req.params;
-  const { username, email, role, password } = req.body;
+  const { username, email, role, password, is_active } = req.body;
 
   try {
     const targetUser = await prisma.user.findUnique({
@@ -224,10 +244,16 @@ export async function adminUpdateUser(req: AuthenticatedRequest, res: Response) 
       return res.status(400).json({ message: 'No puedes quitarte el rol de administrador a ti mismo' });
     }
 
+    // If deactivating self, prevent it
+    if (Number(id) === req.user?.id && is_active === false) {
+      return res.status(400).json({ message: 'No puedes deshabilitar tu propio usuario' });
+    }
+
     const updateData: any = {
-      username,
-      email,
-      role
+      username: username !== undefined ? username : undefined,
+      email: email !== undefined ? email : undefined,
+      role: role !== undefined ? role : undefined,
+      is_active: is_active !== undefined ? Boolean(is_active) : undefined
     };
 
     if (password && password.trim() !== '') {
@@ -243,6 +269,10 @@ export async function adminUpdateUser(req: AuthenticatedRequest, res: Response) 
         username: true,
         email: true,
         role: true,
+        is_active: true,
+        login_count: true,
+        last_login_ip: true,
+        last_login_at: true,
         created_at: true
       }
     });
@@ -304,5 +334,53 @@ export async function getAllCars(req: AuthenticatedRequest, res: Response) {
   } catch (err) {
     console.error('Error fetching all fleet cars:', err);
     res.status(500).json({ message: 'Error al obtener el listado de vehículos' });
+  }
+}
+
+export async function adminTransferCarOwner(req: AuthenticatedRequest, res: Response) {
+  const { id } = req.params;
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ message: 'Se requiere el ID del nuevo propietario' });
+  }
+
+  try {
+    const car = await prisma.car.findUnique({
+      where: { id: Number(id) }
+    });
+
+    if (!car) {
+      return res.status(404).json({ message: 'Vehículo no encontrado' });
+    }
+
+    const newOwner = await prisma.user.findUnique({
+      where: { id: Number(userId) }
+    });
+
+    if (!newOwner) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    const updatedCar = await prisma.car.update({
+      where: { id: Number(id) },
+      data: {
+        user_id: Number(userId)
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            email: true
+          }
+        }
+      }
+    });
+
+    res.json(updatedCar);
+  } catch (err) {
+    console.error('Error transferring car ownership:', err);
+    res.status(500).json({ message: 'Error al transferir la propiedad del vehículo' });
   }
 }

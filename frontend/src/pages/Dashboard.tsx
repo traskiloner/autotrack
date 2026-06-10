@@ -8,7 +8,7 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onSelectCar }) => {
-  const { apiFetch } = useAuth();
+  const { apiFetch, user: currentUser } = useAuth();
   const [cars, setCars] = useState<CarData[]>([]);
   const [alerts, setAlerts] = useState<AlertData[]>([]);
   const [maintenances, setMaintenances] = useState<MaintenanceData[]>([]);
@@ -349,6 +349,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectCar }) => {
                           {hasAlerts && <span title="Alertas pendientes"><AlertTriangle size={16} style={{ color: 'var(--warning)' }} /></span>}
                         </div>
                         <div className="car-subtitle">Año {car.year}</div>
+                        {car.user_id !== currentUser?.id && car.user && (
+                          <div style={{ 
+                            fontSize: '0.75rem', 
+                            background: 'rgba(59, 130, 246, 0.1)', 
+                            color: '#60a5fa', 
+                            border: '1px solid rgba(59, 130, 246, 0.2)', 
+                            padding: '2px 8px', 
+                            borderRadius: '12px', 
+                            fontWeight: 600,
+                            display: 'inline-block',
+                            marginTop: '4px'
+                          }}>
+                            Compartido por {car.user.username}
+                          </div>
+                        )}
                       </div>
                       <span className="car-plate">{car.license_plate}</span>
                     </div>
@@ -371,20 +386,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectCar }) => {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
-                    <button 
-                      className="btn-secondary" 
-                      style={{ 
-                        padding: '8px 12px', 
-                        background: 'rgba(239, 68, 68, 0.05)', 
-                        borderColor: 'rgba(239, 68, 68, 0.1)',
-                        color: 'var(--danger)' 
-                      }}
-                      onClick={(e) => handleDeleteCar(e, car.id)}
-                      title="Eliminar coche"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px', minHeight: '34px' }}>
+                    {car.user_id === currentUser?.id && (
+                      <button 
+                        className="btn-secondary" 
+                        style={{ 
+                          padding: '8px 12px', 
+                          background: 'rgba(239, 68, 68, 0.05)', 
+                          borderColor: 'rgba(239, 68, 68, 0.1)',
+                          color: 'var(--danger)' 
+                        }}
+                        onClick={(e) => handleDeleteCar(e, car.id)}
+                        title="Eliminar coche"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </div>
                 </div>
               );

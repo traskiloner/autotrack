@@ -20,7 +20,10 @@ export async function getMaintenances(req: AuthenticatedRequest, res: Response) 
     const carCheck = await prisma.car.findFirst({
       where: {
         id: Number(carId),
-        user_id: userId,
+        OR: [
+          { user_id: userId },
+          { shares: { some: { user_id: userId } } }
+        ]
       },
     });
 
@@ -63,7 +66,10 @@ export async function createMaintenance(req: AuthenticatedRequest, res: Response
     const carCheck = await prisma.car.findFirst({
       where: {
         id: Number(carId),
-        user_id: userId,
+        OR: [
+          { user_id: userId },
+          { shares: { some: { user_id: userId } } }
+        ]
       },
     });
 
@@ -159,7 +165,10 @@ export async function deleteMaintenance(req: AuthenticatedRequest, res: Response
       where: {
         id: Number(maintenanceId),
         car: {
-          user_id: userId,
+          OR: [
+            { user_id: userId },
+            { shares: { some: { user_id: userId } } }
+          ]
         },
       },
       include: {
@@ -208,7 +217,10 @@ export async function getAllMaintenances(req: AuthenticatedRequest, res: Respons
     const maintenances = await prisma.maintenance.findMany({
       where: {
         car: {
-          user_id: userId,
+          OR: [
+            { user_id: userId },
+            { shares: { some: { user_id: userId } } }
+          ]
         },
       },
       include: {

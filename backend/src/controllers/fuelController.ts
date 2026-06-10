@@ -11,7 +11,10 @@ export async function getCarFuelLogs(req: AuthenticatedRequest, res: Response) {
     const carCheck = await prisma.car.findFirst({
       where: {
         id: Number(carId),
-        user_id: userId,
+        OR: [
+          { user_id: userId },
+          { shares: { some: { user_id: userId } } }
+        ]
       },
     });
 
@@ -49,7 +52,10 @@ export async function createFuelLog(req: AuthenticatedRequest, res: Response) {
     const carCheck = await prisma.car.findFirst({
       where: {
         id: Number(carId),
-        user_id: userId,
+        OR: [
+          { user_id: userId },
+          { shares: { some: { user_id: userId } } }
+        ]
       },
     });
 
@@ -103,7 +109,10 @@ export async function deleteFuelLog(req: AuthenticatedRequest, res: Response) {
       where: {
         id: Number(logId),
         car: {
-          user_id: userId,
+          OR: [
+            { user_id: userId },
+            { shares: { some: { user_id: userId } } }
+          ]
         },
       },
     });

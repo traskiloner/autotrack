@@ -21,6 +21,7 @@ export interface Maintenance {
 
 export interface CarData {
   id: number;
+  user_id?: number | null;
   brand: string;
   model: string;
   year: number;
@@ -31,6 +32,11 @@ export interface CarData {
   vin?: string | null;
   tire_size?: string | null;
   oil_type?: string | null;
+  user?: {
+    id: number;
+    username: string;
+    email: string;
+  } | null;
 }
 
 export interface Alert {

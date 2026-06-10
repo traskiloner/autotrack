@@ -7,14 +7,19 @@ datasource db {
 }
 
 model User {
-  id            Int             @id @default(autoincrement())
-  username      String          @unique @db.VarChar(50)
-  email         String          @unique @db.VarChar(100)
-  password_hash String          @db.VarChar(255)
-  role          String          @default("user") @db.VarChar(20)
-  created_at    DateTime        @default(now()) @db.Timestamp()
-  cars          Car[]
-  inventory     InventoryPart[]
+  id             Int             @id @default(autoincrement())
+  username       String          @unique @db.VarChar(50)
+  email          String          @unique @db.VarChar(100)
+  password_hash  String          @db.VarChar(255)
+  role           String          @default("user") @db.VarChar(20)
+  created_at     DateTime        @default(now()) @db.Timestamp()
+  is_active      Boolean         @default(true)
+  login_count    Int             @default(0)
+  last_login_ip  String?         @db.VarChar(45)
+  last_login_at  DateTime?       @db.Timestamp()
+  cars           Car[]
+  inventory      InventoryPart[]
+  shared_cars    CarShare[]
 
   @@map("users")
 }
@@ -38,6 +43,7 @@ model Car {
   maintenances  Maintenance[]
   alerts        MaintenanceAlert[]
   fuel_logs     FuelLog[]
+  shares        CarShare[]
 
   @@map("cars")
 }
@@ -116,5 +122,18 @@ model FuelLog {
   car             Car       @relation(fields: [car_id], references: [id], onDelete: Cascade)
 
   @@map("fuel_logs")
+}
+
+model CarShare {
+  id         Int      @id @default(autoincrement())
+  car_id     Int
+  user_id    Int
+  created_at DateTime @default(now()) @db.Timestamp()
+  
+  car  Car  @relation(fields: [car_id], references: [id], onDelete: Cascade)
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([car_id, user_id])
+  @@map("car_shares")
 }
 

@@ -7,7 +7,21 @@ export async function getCars(req: AuthenticatedRequest, res: Response) {
 
   try {
     const cars = await prisma.car.findMany({
-      where: { user_id: userId },
+      where: {
+        OR: [
+          { user_id: userId },
+          { shares: { some: { user_id: userId } } }
+        ]
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            email: true
+          }
+        }
+      },
       orderBy: { created_at: 'desc' },
     });
     res.json(cars);
@@ -25,8 +39,20 @@ export async function getCarById(req: AuthenticatedRequest, res: Response) {
     const car = await prisma.car.findFirst({
       where: {
         id: Number(carId),
-        user_id: userId,
+        OR: [
+          { user_id: userId },
+          { shares: { some: { user_id: userId } } }
+        ]
       },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            email: true
+          }
+        }
+      }
     });
 
     if (!car) {
@@ -140,5 +166,151 @@ export async function deleteCar(req: AuthenticatedRequest, res: Response) {
   } catch (err) {
     console.error('Error deleting car:', err);
     res.status(500).json({ message: 'Error al eliminar el coche' });
+  }
+}
+
+export async function getCarShares(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user?.id;
+  const carId = req.params.carId;
+
+  try {
+    const car = await prisma.car.findFirst({
+      where: {
+        id: Number(carId),
+        user_id: userId,
+      },
+    });
+
+    if (!car) {
+      return res.status(403).json({ message: 'No tienes permiso para ver los compartidos de este coche' });
+    }
+
+    const shares = await prisma.carShare.findMany({
+      where: {
+        car_id: Number(carId),
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    const users = shares.map(s => s.user);
+    res.json(users);
+  } catch (err) {
+    console.error('Error fetching car shares:', err);
+    res.status(500).json({ message: 'Error al obtener los usuarios compartidos' });
+  }
+}
+
+export async function shareCar(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user?.id;
+  const carId = req.params.carId;
+  const { identifier } = req.body;
+
+  if (!identifier) {
+    return res.status(400).json({ message: 'Se requiere el nombre de usuario o email' });
+  }
+
+  try {
+    const car = await prisma.car.findFirst({
+      where: {
+        id: Number(carId),
+        user_id: userId,
+      },
+    });
+
+    if (!car) {
+      return res.status(403).json({ message: 'No tienes permiso para compartir este coche' });
+    }
+
+    const targetUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { username: identifier },
+          { email: identifier },
+        ],
+      },
+    });
+
+    if (!targetUser) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    if (targetUser.id === userId) {
+      return res.status(400).json({ message: 'No puedes compartir un coche contigo mismo' });
+    }
+
+    const existingShare = await prisma.carShare.findUnique({
+      where: {
+        car_id_user_id: {
+          car_id: Number(carId),
+          user_id: targetUser.id,
+        },
+      },
+    });
+
+    if (existingShare) {
+      return res.status(400).json({ message: 'El coche ya está compartido con este usuario' });
+    }
+
+    const newShare = await prisma.carShare.create({
+      data: {
+        car_id: Number(carId),
+        user_id: targetUser.id,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    res.status(201).json(newShare.user);
+  } catch (err) {
+    console.error('Error sharing car:', err);
+    res.status(500).json({ message: 'Error al compartir el coche' });
+  }
+}
+
+export async function unshareCar(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user?.id;
+  const carId = req.params.carId;
+  const targetUserId = req.params.userId;
+
+  try {
+    const car = await prisma.car.findFirst({
+      where: {
+        id: Number(carId),
+        user_id: userId,
+      },
+    });
+
+    if (!car) {
+      return res.status(403).json({ message: 'No tienes permiso para gestionar los compartidos de este coche' });
+    }
+
+    await prisma.carShare.delete({
+      where: {
+        car_id_user_id: {
+          car_id: Number(carId),
+          user_id: Number(targetUserId),
+        },
+      },
+    });
+
+    res.json({ message: 'Acceso revocado correctamente' });
+  } catch (err) {
+    console.error('Error unsharing car:', err);
+    res.status(500).json({ message: 'Error al revocar el acceso' });
   }
 }

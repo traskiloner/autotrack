@@ -78,11 +78,28 @@ export async function login(req: Request, res: Response) {
       return res.status(400).json({ message: 'Credenciales inválidas' });
     }
 
+    if (!user.is_active) {
+      return res.status(403).json({ message: 'Tu cuenta ha sido deshabilitada por el administrador' });
+    }
+
     // Check password
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       return res.status(400).json({ message: 'Credenciales inválidas' });
     }
+
+    // Update login stats
+    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+    const ipStr = Array.isArray(rawIp) ? rawIp[0] : (typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : '');
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        login_count: { increment: 1 },
+        last_login_ip: ipStr || null,
+        last_login_at: new Date()
+      }
+    });
 
     // Generate JWT
     const secret = process.env.JWT_SECRET || 'super_secret_key_change_me_123';

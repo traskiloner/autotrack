@@ -10,7 +10,10 @@ export async function getUserAlerts(req: AuthenticatedRequest, res: Response) {
       where: {
         is_completed: false,
         car: {
-          user_id: userId,
+          OR: [
+            { user_id: userId },
+            { shares: { some: { user_id: userId } } }
+          ]
         },
       },
       include: {
@@ -59,7 +62,10 @@ export async function getCarAlerts(req: AuthenticatedRequest, res: Response) {
     const carCheck = await prisma.car.findFirst({
       where: {
         id: Number(carId),
-        user_id: userId,
+        OR: [
+          { user_id: userId },
+          { shares: { some: { user_id: userId } } }
+        ]
       },
     });
 
@@ -102,7 +108,10 @@ export async function createAlert(req: AuthenticatedRequest, res: Response) {
     const carCheck = await prisma.car.findFirst({
       where: {
         id: Number(carId),
-        user_id: userId,
+        OR: [
+          { user_id: userId },
+          { shares: { some: { user_id: userId } } }
+        ]
       },
     });
 
@@ -135,7 +144,10 @@ export async function completeAlert(req: AuthenticatedRequest, res: Response) {
       where: {
         id: Number(alertId),
         car: {
-          user_id: userId,
+          OR: [
+            { user_id: userId },
+            { shares: { some: { user_id: userId } } }
+          ]
         },
       },
     });
@@ -170,7 +182,10 @@ export async function deleteAlert(req: AuthenticatedRequest, res: Response) {
       where: {
         id: Number(alertId),
         car: {
-          user_id: userId,
+          OR: [
+            { user_id: userId },
+            { shares: { some: { user_id: userId } } }
+          ]
         },
       },
     });

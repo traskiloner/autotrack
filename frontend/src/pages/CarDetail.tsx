@@ -68,7 +68,7 @@ const CHECKLIST_TEMPLATES = [
 ];
 
 export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
-  const { apiFetch } = useAuth();
+  const { apiFetch, user: currentUser } = useAuth();
   const [car, setCar] = useState<CarData | null>(null);
   const [maintenances, setMaintenances] = useState<Maintenance[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -78,7 +78,14 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
   const [error, setError] = useState<string | null>(null);
 
   // Tab State
-  const [activeTab, setActiveTab] = useState<'maintenance' | 'alerts' | 'fuel'>('maintenance');
+  const [activeTab, setActiveTab] = useState<'maintenance' | 'alerts' | 'fuel' | 'share'>('maintenance');
+
+  // Sharing States
+  const [shares, setShares] = useState<{ id: number; username: string; email: string }[]>([]);
+  const [shareIdentifier, setShareIdentifier] = useState('');
+  const [sharing, setSharing] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [shareSuccess, setShareSuccess] = useState<string | null>(null);
 
   // Document Preview State
   const [previewDocUrl, setPreviewDocUrl] = useState<string | null>(null);
@@ -147,6 +154,57 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
   useEffect(() => {
     fetchData();
   }, [carId]);
+
+  const fetchShares = async () => {
+    try {
+      const data = await apiFetch(`/api/cars/${carId}/shares`);
+      setShares(data);
+    } catch (err) {
+      console.error('Error fetching shares:', err);
+    }
+  };
+
+  const handleShareCar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!shareIdentifier.trim()) return;
+
+    setSharing(true);
+    setShareError(null);
+    setShareSuccess(null);
+
+    try {
+      const newUser = await apiFetch(`/api/cars/${carId}/share`, {
+        method: 'POST',
+        body: JSON.stringify({ identifier: shareIdentifier }),
+      });
+      setShares([...shares, newUser]);
+      setShareIdentifier('');
+      setShareSuccess('Vehículo compartido correctamente');
+    } catch (err: any) {
+      setShareError(err.message || 'Error al compartir el vehículo');
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const handleUnshareCar = async (targetUserId: number) => {
+    if (!confirm('¿Deseas revocar el acceso a este usuario?')) return;
+
+    try {
+      await apiFetch(`/api/cars/${carId}/share/${targetUserId}`, {
+        method: 'DELETE',
+      });
+      setShares(shares.filter(s => s.id !== targetUserId));
+    } catch (err: any) {
+      alert(err.message || 'Error al revocar acceso');
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'share' && car?.user_id === currentUser?.id) {
+      fetchShares();
+    }
+  }, [activeTab, car, currentUser]);
 
   useEffect(() => {
     const l = Number(fuelLiters);
@@ -719,6 +777,14 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
         >
           ⛽ Consumo de Combustible
         </button>
+        <button 
+          type="button" 
+          className={`btn ${activeTab === 'share' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setActiveTab('share')}
+          style={{ padding: '8px 16px', fontSize: '0.9rem' }}
+        >
+          👥 Compartir Acceso
+        </button>
       </div>
 
       {/* Main Section: Two-Column Layout */}
@@ -1182,6 +1248,111 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 4: SHARE CAR */}
+          {activeTab === 'share' && car && (
+            <div className="animate-fade-in">
+              <h3 style={{ fontSize: '1.5rem', marginBottom: '20px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '10px' }}>
+                Compartir Acceso al Vehículo
+              </h3>
+
+              {car.user_id === currentUser?.id ? (
+                <div>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginBottom: '24px', lineHeight: '1.6' }}>
+                    Como propietario del vehículo, puedes compartir el acceso con otros usuarios de la plataforma. Los usuarios autorizados podrán registrar y ver mantenimientos, consumos de combustible y alertas de este vehículo, pero no podrán eliminarlo ni administrar la lista de usuarios compartidos.
+                  </p>
+
+                  <div className="glass-card" style={{ padding: '24px', marginBottom: '28px', border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(255, 255, 255, 0.02)' }}>
+                    <h4 style={{ margin: '0 0 16px 0', fontSize: '1.1rem' }}>Compartir con un nuevo usuario</h4>
+                    <form onSubmit={handleShareCar} style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                      <div className="form-group" style={{ flex: '1', minWidth: '250px', marginBottom: 0 }}>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="Nombre de usuario o correo electrónico del destinatario..."
+                          value={shareIdentifier}
+                          onChange={(e) => setShareIdentifier(e.target.value)}
+                          required
+                          style={{ margin: 0 }}
+                        />
+                      </div>
+                      <button 
+                        type="submit" 
+                        className="btn-primary" 
+                        disabled={sharing}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                      >
+                        {sharing ? 'Compartiendo...' : 'Compartir'}
+                      </button>
+                    </form>
+                    
+                    {shareError && (
+                      <div style={{ color: '#ff9292', fontSize: '0.85rem', marginTop: '10px' }}>
+                        ⚠️ {shareError}
+                      </div>
+                    )}
+                    
+                    {shareSuccess && (
+                      <div style={{ color: '#86efac', fontSize: '0.85rem', marginTop: '10px' }}>
+                        ✓ {shareSuccess}
+                      </div>
+                    )}
+                  </div>
+
+                  <h4 style={{ margin: '0 0 16px 0', fontSize: '1.1rem' }}>Usuarios con Acceso Autorizado</h4>
+                  {shares.length === 0 ? (
+                    <div className="glass-card" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-secondary)' }}>
+                      Este vehículo no se ha compartido con ningún usuario todavía.
+                    </div>
+                  ) : (
+                    <div className="table-responsive" style={{ overflowX: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: 'var(--radius-lg)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
+                            <th style={{ padding: '12px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Nombre de usuario</th>
+                            <th style={{ padding: '12px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Email</th>
+                            <th style={{ padding: '12px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', textAlign: 'right' }}>Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {shares.map((sharedUser) => (
+                            <tr key={sharedUser.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: '0.9rem' }}>
+                              <td style={{ padding: '12px 16px', fontWeight: 600 }}>{sharedUser.username}</td>
+                              <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{sharedUser.email}</td>
+                              <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                                <button
+                                  type="button"
+                                  className="btn-secondary"
+                                  style={{ padding: '6px 12px', color: 'var(--danger)', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
+                                  onClick={() => handleUnshareCar(sharedUser.id)}
+                                >
+                                  <Trash2 size={12} /> Revocar Acceso
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="glass-card" style={{ padding: '24px', textAlign: 'center', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                  <div style={{ display: 'inline-flex', justifyContent: 'center', alignItems: 'center', width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', marginBottom: '16px', fontSize: '1.5rem' }}>
+                    👥
+                  </div>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '1.25rem' }}>Vehículo Compartido</h4>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', maxWidth: '500px', margin: '0 auto 16px auto', lineHeight: '1.6' }}>
+                    Tienes permisos de lectura y escritura sobre este vehículo porque el propietario te ha concedido acceso.
+                  </p>
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px 20px', borderRadius: 'var(--radius-md)', display: 'inline-block', border: '1px solid rgba(255,255,255,0.04)' }}>
+                    <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Propietario original</span>
+                    <strong style={{ fontSize: '1rem', color: 'var(--text-primary)' }}>{car.user?.username || 'Otro usuario'} ({car.user?.email || '-'})</strong>
+                  </div>
                 </div>
               )}
             </div>

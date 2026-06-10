@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { initDb } from './db';
 import { register, login, updateProfile } from './controllers/authController';
-import { getCars, getCarById, createCar, updateCar, deleteCar } from './controllers/carController';
+import { getCars, getCarById, createCar, updateCar, deleteCar, getCarShares, shareCar, unshareCar } from './controllers/carController';
 import { getMaintenances, createMaintenance, deleteMaintenance, getAllMaintenances } from './controllers/maintenanceController';
 import { getInventory, createInventoryPart, updateInventoryPart, deleteInventoryPart } from './controllers/inventoryController';
 import { getUserAlerts, getCarAlerts, createAlert, completeAlert, deleteAlert } from './controllers/alertController';
@@ -19,7 +19,8 @@ import {
   adminCreateUser,
   adminUpdateUser,
   adminDeleteUser,
-  getAllCars
+  getAllCars,
+  adminTransferCarOwner
 } from './controllers/adminController';
 
 dotenv.config();
@@ -50,6 +51,7 @@ app.post('/api/admin/users', authMiddleware, adminMiddleware, adminCreateUser);
 app.put('/api/admin/users/:id', authMiddleware, adminMiddleware, adminUpdateUser);
 app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, adminDeleteUser);
 app.get('/api/admin/cars', authMiddleware, adminMiddleware, getAllCars);
+app.put('/api/admin/cars/:id/transfer', authMiddleware, adminMiddleware, adminTransferCarOwner);
 
 // Car Routes (Protected)
 app.get('/api/cars', authMiddleware, getCars);
@@ -57,6 +59,9 @@ app.get('/api/cars/:id', authMiddleware, getCarById);
 app.post('/api/cars', authMiddleware, createCar);
 app.put('/api/cars/:id', authMiddleware, updateCar);
 app.delete('/api/cars/:id', authMiddleware, deleteCar);
+app.get('/api/cars/:carId/shares', authMiddleware, getCarShares);
+app.post('/api/cars/:carId/share', authMiddleware, shareCar);
+app.delete('/api/cars/:carId/share/:userId', authMiddleware, unshareCar);
 
 // Maintenance Routes (Protected)
 app.get('/api/maintenances', authMiddleware, getAllMaintenances);

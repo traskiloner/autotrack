@@ -30,6 +30,10 @@ interface UserListItem {
   username: string;
   email: string;
   role: string;
+  is_active: boolean;
+  login_count: number;
+  last_login_ip: string | null;
+  last_login_at: string | null;
   created_at: string;
   _count: {
     cars: number;
@@ -69,6 +73,65 @@ export const AdminPanel: React.FC = () => {
   const [modalPassword, setModalPassword] = useState('');
   const [modalRole, setModalRole] = useState('user');
   const [modalSubmitting, setModalSubmitting] = useState(false);
+  const [modalIsActive, setModalIsActive] = useState(true);
+
+  // Transfer Owner modal states
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferringCar, setTransferringCar] = useState<CarListItem | null>(null);
+  const [transferUserId, setTransferUserId] = useState<string>('');
+  const [transferSubmitting, setTransferSubmitting] = useState(false);
+
+  const openTransferModal = async (car: CarListItem) => {
+    setTransferringCar(car);
+    setTransferUserId(car.user ? String(car.user.id) : '');
+    setShowTransferModal(true);
+    
+    // Ensure user list is loaded so the select list is populated
+    try {
+      const usersData = await apiFetch('/api/admin/users');
+      setUsers(usersData);
+    } catch (err: any) {
+      console.error('Error fetching users for transfer list:', err);
+    }
+  };
+
+  const handleTransferSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!transferringCar || !transferUserId) return;
+    setTransferSubmitting(true);
+    setError(null);
+
+    try {
+      await apiFetch(`/api/admin/cars/${transferringCar.id}/transfer`, {
+        method: 'PUT',
+        body: JSON.stringify({ userId: Number(transferUserId) })
+      });
+      setShowTransferModal(false);
+      fetchTabRequests();
+    } catch (err: any) {
+      setError(err.message || 'Error al transferir la propiedad del vehículo');
+    } finally {
+      setTransferSubmitting(false);
+    }
+  };
+
+  const handleToggleActive = async (targetId: number, currentActive: boolean) => {
+    if (targetId === currentUser?.id) {
+      alert('No puedes deshabilitar tu propio usuario.');
+      return;
+    }
+    try {
+      setLoading(true);
+      await apiFetch(`/api/admin/users/${targetId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ is_active: !currentActive })
+      });
+      fetchTabRequests();
+    } catch (err: any) {
+      setError(err.message || 'Error al cambiar el estado del usuario');
+      setLoading(false);
+    }
+  };
 
   const fetchTabRequests = async () => {
     try {
@@ -102,6 +165,7 @@ export const AdminPanel: React.FC = () => {
     setModalEmail('');
     setModalPassword('');
     setModalRole('user');
+    setModalIsActive(true);
     setShowUserModal(true);
   };
 
@@ -111,6 +175,7 @@ export const AdminPanel: React.FC = () => {
     setModalEmail(target.email);
     setModalPassword(''); // Empty by default
     setModalRole(target.role);
+    setModalIsActive(target.is_active);
     setShowUserModal(true);
   };
 
@@ -126,7 +191,8 @@ export const AdminPanel: React.FC = () => {
     const body: any = {
       username: modalUsername,
       email: modalEmail,
-      role: modalRole
+      role: modalRole,
+      is_active: modalIsActive
     };
 
     if (!isEdit || (modalPassword && modalPassword.trim() !== '')) {
@@ -304,9 +370,21 @@ export const AdminPanel: React.FC = () => {
                       <span style={{ color: 'var(--text-secondary)' }}>Stock acumulado de piezas:</span>
                       <strong style={{ color: 'var(--text-primary)' }}>{stats.totalInventoryStock} unidades</strong>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.04)', paddingBottom: '8px' }}>
                       <span style={{ color: 'var(--text-secondary)' }}>Promedio vehículos por usuario:</span>
                       <strong style={{ color: 'var(--text-primary)' }}>{(stats.totalUsers > 0 ? (stats.totalCars / stats.totalUsers).toFixed(1) : 0)} coches</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.04)', paddingBottom: '8px' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>Usuarios activos / deshabilitados:</span>
+                      <strong style={{ color: 'var(--text-primary)' }}>{(stats as any).activeUsersCount || 0} / {(stats as any).disabledUsersCount || 0}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.04)', paddingBottom: '8px' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>Total accesos compartidos:</span>
+                      <strong style={{ color: 'var(--text-primary)' }}>{(stats as any).totalShares || 0} relaciones</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>Inicios de sesión promedio:</span>
+                      <strong style={{ color: 'var(--text-primary)' }}>{(stats as any).avgLogins ? (stats as any).avgLogins.toFixed(1) : '0.0'} accesos</strong>
                     </div>
                   </div>
                 </div>
@@ -355,9 +433,11 @@ export const AdminPanel: React.FC = () => {
                         <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Usuario</th>
                         <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Email</th>
                         <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Rol</th>
+                        <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Estado</th>
                         <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Vehículos</th>
                         <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Inventario</th>
-                        <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Fecha de Registro</th>
+                        <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Último Acceso (IP)</th>
+                        <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Sesiones</th>
                         <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', textAlign: 'right' }}>Acciones</th>
                       </tr>
                     </thead>
@@ -377,10 +457,44 @@ export const AdminPanel: React.FC = () => {
                               </span>
                             )}
                           </td>
+                          <td style={{ padding: '14px 16px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleActive(u.id, u.is_active)}
+                              className={u.is_active ? 'btn-success' : 'btn-danger'}
+                              style={{ 
+                                padding: '4px 10px', 
+                                fontSize: '0.75rem', 
+                                borderRadius: '12px', 
+                                fontWeight: 600,
+                                border: '1px solid',
+                                background: u.is_active ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                color: u.is_active ? '#34d399' : '#f87171',
+                                borderColor: u.is_active ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                cursor: u.id === currentUser?.id ? 'not-allowed' : 'pointer'
+                              }}
+                              disabled={u.id === currentUser?.id}
+                            >
+                              {u.is_active ? 'Activo' : 'Deshabilitado'}
+                            </button>
+                          </td>
                           <td style={{ padding: '14px 16px', fontWeight: 500 }}>{u._count.cars}</td>
                           <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>{u._count.inventory} ref.</td>
-                          <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>
-                            {new Date(u.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                          <td style={{ padding: '14px 16px', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
+                            {u.last_login_at ? (
+                              <>
+                                {new Date(u.last_login_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                <br />
+                                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                                  IP: {u.last_login_ip || 'N/D'}
+                                </span>
+                              </>
+                            ) : (
+                              <em style={{ color: 'var(--text-muted)' }}>Nunca</em>
+                            )}
+                          </td>
+                          <td style={{ padding: '14px 16px', fontWeight: 500 }}>
+                            {u.login_count}
                           </td>
                           <td style={{ padding: '14px 16px', textAlign: 'right' }}>
                             <div style={{ display: 'inline-flex', gap: '8px' }}>
@@ -432,6 +546,7 @@ export const AdminPanel: React.FC = () => {
                         <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Kilometraje</th>
                         <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Propietario</th>
                         <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Email del Propietario</th>
+                        <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', textAlign: 'right' }}>Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -448,6 +563,17 @@ export const AdminPanel: React.FC = () => {
                           <td style={{ padding: '14px 16px', fontWeight: 500 }}>{car.user ? car.user.username : <em style={{ color: 'var(--text-muted)' }}>Ninguno</em>}</td>
                           <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>
                             {car.user ? car.user.email : '-'}
+                          </td>
+                          <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                            <button
+                              type="button"
+                              onClick={() => openTransferModal(car)}
+                              className="btn-secondary"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', padding: '6px 12px' }}
+                              title="Transferir propiedad"
+                            >
+                              <RefreshCw size={12} /> Transferir
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -524,6 +650,18 @@ export const AdminPanel: React.FC = () => {
                 </select>
               </div>
 
+              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
+                <input
+                  type="checkbox"
+                  id="modalIsActive"
+                  checked={modalIsActive}
+                  onChange={e => setModalIsActive(e.target.checked)}
+                  style={{ width: 'auto', margin: 0 }}
+                  disabled={editingUser?.id === currentUser?.id}
+                />
+                <label htmlFor="modalIsActive" style={{ margin: 0, cursor: editingUser?.id === currentUser?.id ? 'not-allowed' : 'pointer' }}>Usuario Activo / Habilitado</label>
+              </div>
+
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
                 <button 
                   type="button" 
@@ -539,6 +677,60 @@ export const AdminPanel: React.FC = () => {
                   disabled={modalSubmitting}
                 >
                   {modalSubmitting ? 'Guardando...' : 'Guardar Cambios'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* VEHICLE TRANSFER MODAL */}
+      {showTransferModal && transferringCar && (
+        <div className="modal-backdrop" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div className="glass-card modal-content animate-scale-up" style={{ width: '420px', padding: '28px' }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 20px 0', fontSize: '1.2rem' }}>
+              Transferir Vehículo: {transferringCar.brand} {transferringCar.model}
+            </h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '20px' }}>
+              Matrícula: <strong>{transferringCar.license_plate}</strong><br />
+              Propietario actual: <strong>{transferringCar.user ? transferringCar.user.username : 'Ninguno'}</strong>
+            </p>
+
+            <form onSubmit={handleTransferSubmit}>
+              <div className="form-group" style={{ marginBottom: '24px' }}>
+                <label htmlFor="transferUser">Seleccionar Nuevo Propietario</label>
+                <select
+                  id="transferUser"
+                  className="form-control"
+                  value={transferUserId}
+                  onChange={e => setTransferUserId(e.target.value)}
+                  style={{ width: '100%', background: 'rgba(0,0,0,0.4)', color: 'white' }}
+                  required
+                >
+                  <option value="" disabled style={{ background: '#1a1a1e' }}>Selecciona un usuario...</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.id} style={{ background: '#1a1a1e' }}>
+                      {u.username} ({u.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setShowTransferModal(false)} 
+                  className="btn-secondary"
+                  disabled={transferSubmitting}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn-primary"
+                  disabled={transferSubmitting || !transferUserId}
+                >
+                  {transferSubmitting ? 'Transferiendo...' : 'Transferir Propiedad'}
                 </button>
               </div>
             </form>
