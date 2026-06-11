@@ -15,9 +15,7 @@ services:
       - autotrack_network
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: traskiloner/autotrack-backend:latest
     container_name: autotrack_backend
     restart: always
     environment:
@@ -35,9 +33,7 @@ services:
       - autotrack_network
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: traskiloner/autotrack-frontend:latest
     container_name: autotrack_frontend
     restart: always
     ports:
