@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../db';
+import { sendCarSharedEmail, sendCarUnsharedEmail } from '../services/emailService';
 
 export async function getCars(req: AuthenticatedRequest, res: Response) {
   const userId = req.user?.id;
@@ -275,6 +276,13 @@ export async function shareCar(req: AuthenticatedRequest, res: Response) {
       },
     });
 
+    // Send email asynchronously
+    const ownerName = req.user?.username || 'Un usuario';
+    const carDetails = `${car.brand} ${car.model} (${car.license_plate})`;
+    sendCarSharedEmail(targetUser.email, targetUser.username, ownerName, carDetails).catch(err => {
+      console.error('Error sending car shared email:', err);
+    });
+
     res.status(201).json(newShare.user);
   } catch (err) {
     console.error('Error sharing car:', err);
@@ -299,6 +307,22 @@ export async function unshareCar(req: AuthenticatedRequest, res: Response) {
       return res.status(403).json({ message: 'No tienes permiso para gestionar los compartidos de este coche' });
     }
 
+    const shareToDelete = await prisma.carShare.findUnique({
+      where: {
+        car_id_user_id: {
+          car_id: Number(carId),
+          user_id: Number(targetUserId),
+        },
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    if (!shareToDelete) {
+      return res.status(404).json({ message: 'El coche no está compartido con este usuario' });
+    }
+
     await prisma.carShare.delete({
       where: {
         car_id_user_id: {
@@ -306,6 +330,13 @@ export async function unshareCar(req: AuthenticatedRequest, res: Response) {
           user_id: Number(targetUserId),
         },
       },
+    });
+
+    // Send email asynchronously
+    const ownerName = req.user?.username || 'Un usuario';
+    const carDetails = `${car.brand} ${car.model} (${car.license_plate})`;
+    sendCarUnsharedEmail(shareToDelete.user.email, shareToDelete.user.username, ownerName, carDetails).catch(err => {
+      console.error('Error sending car unshared email:', err);
     });
 
     res.json({ message: 'Acceso revocado correctamente' });

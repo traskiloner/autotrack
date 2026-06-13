@@ -35,6 +35,11 @@ services:
       - DB_NAME=${DB_NAME:-autotrack}
       - JWT_SECRET=${JWT_SECRET:-super_secret_key_change_me_123}
       - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres_pass}@db:5432/${DB_NAME:-autotrack}?schema=public
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
     depends_on:
       db:
         condition: service_healthy

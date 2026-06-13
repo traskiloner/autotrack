@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../db';
+import { sendNewAlertEmail } from '../services/emailService';
 
 export async function getUserAlerts(req: AuthenticatedRequest, res: Response) {
   const userId = req.user?.id;
@@ -104,7 +105,7 @@ export async function createAlert(req: AuthenticatedRequest, res: Response) {
   }
 
   try {
-    // Check car ownership
+    // Check car ownership and fetch owner and shared users
     const carCheck = await prisma.car.findFirst({
       where: {
         id: Number(carId),
@@ -112,6 +113,14 @@ export async function createAlert(req: AuthenticatedRequest, res: Response) {
           { user_id: userId },
           { shares: { some: { user_id: userId } } }
         ]
+      },
+      include: {
+        user: true,
+        shares: {
+          include: {
+            user: true,
+          },
+        },
       },
     });
 
@@ -127,6 +136,41 @@ export async function createAlert(req: AuthenticatedRequest, res: Response) {
         target_mileage: targetMileage ? Number(targetMileage) : null,
       },
     });
+
+    // Send email notifications asynchronously
+    const carInfo = `${carCheck.brand} ${carCheck.model} (${carCheck.license_plate})`;
+    const targetDateStr = targetDate ? new Date(targetDate).toLocaleDateString('es-ES') : '';
+    const targetMileageStr = targetMileage ? `${targetMileage} km` : '';
+    
+    let criteria = '';
+    if (targetDateStr && targetMileageStr) {
+      criteria = ` (Para: ${targetDateStr} o ${targetMileageStr})`;
+    } else if (targetDateStr) {
+      criteria = ` (Para: ${targetDateStr})`;
+    } else if (targetMileageStr) {
+      criteria = ` (Para: ${targetMileageStr})`;
+    }
+    
+    const alertInfo = `${description}${criteria}`;
+
+    // Notify owner
+    if (carCheck.user) {
+      sendNewAlertEmail(carCheck.user.email, carCheck.user.username, carInfo, alertInfo).catch(err => {
+        console.error('Error sending alert email to owner:', err);
+      });
+    }
+
+    // Notify shared users
+    if (carCheck.shares) {
+      for (const share of carCheck.shares) {
+        if (share.user) {
+          sendNewAlertEmail(share.user.email, share.user.username, carInfo, alertInfo).catch(err => {
+            console.error('Error sending alert email to shared user:', err);
+          });
+        }
+      }
+    }
+
     res.status(201).json(alert);
   } catch (err) {
     console.error('Error creating alert:', err);

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../db';
 import { AuthenticatedRequest } from '../middlewares/auth';
+import { sendWelcomeEmail } from '../services/emailService';
 
 export async function register(req: Request, res: Response) {
   const { username, email, password } = req.body;
@@ -28,7 +29,7 @@ export async function register(req: Request, res: Response) {
 
     // Hash password
     const salt = await bcrypt.genSalt(10);
-        const passwordHash = await bcrypt.hash(password, salt);
+    const passwordHash = await bcrypt.hash(password, salt);
 
     // Insert user
     const user = await prisma.user.create({
@@ -43,6 +44,11 @@ export async function register(req: Request, res: Response) {
         email: true,
         role: true,
       }
+    });
+
+    // Send welcome email asynchronously
+    sendWelcomeEmail(user.email, user.username).catch(err => {
+      console.error('Error sending welcome email in controller:', err);
     });
 
     // Generate JWT
