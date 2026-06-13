@@ -264,74 +264,76 @@ export const Profile: React.FC = () => {
         </form>
       </div>
 
-      <div className="glass-card" style={{ padding: '28px', marginTop: '24px' }}>
-        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px', fontWeight: 600 }}>Prueba de Servidor de Correos</h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '20px' }}>
-          Envía un correo de prueba a tu dirección (<strong>{email}</strong>) para comprobar que la configuración SMTP funciona correctamente.
-        </p>
+      {user?.role === 'admin' && (
+        <div className="glass-card" style={{ padding: '28px', marginTop: '24px' }}>
+          <h2 style={{ fontSize: '1.2rem', marginBottom: '12px', fontWeight: 600 }}>Prueba de Servidor de Correos</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '20px' }}>
+            Envía un correo de prueba a tu dirección (<strong>{email}</strong>) para comprobar que la configuración SMTP funciona correctamente.
+          </p>
 
-        {testError && (
-          <div 
-            className="glass-container" 
-            style={{ 
-              background: 'rgba(239, 68, 68, 0.1)', 
-              borderColor: 'var(--danger)', 
-              padding: '12px 16px', 
-              borderRadius: 'var(--radius-md)', 
-              marginBottom: '20px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              color: '#ff8a8a',
-              fontSize: '0.9rem'
-            }}
-          >
-            <AlertCircle size={20} />
-            <span>{testError}</span>
-          </div>
-        )}
-
-        {testSuccess && (
-          <div 
-            className="glass-container" 
-            style={{ 
-              background: 'rgba(16, 185, 129, 0.1)', 
-              borderColor: 'var(--success)', 
-              padding: '12px 16px', 
-              borderRadius: 'var(--radius-md)', 
-              marginBottom: '20px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              color: '#a7f3d0',
-              fontSize: '0.9rem'
-            }}
-          >
-            <CheckCircle2 size={20} />
-            <span>{testSuccess}</span>
-          </div>
-        )}
-
-        <button 
-          type="button" 
-          className="btn-secondary" 
-          style={{ width: '100%', padding: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-          onClick={handleSendTestEmail}
-          disabled={testLoading}
-        >
-          {testLoading ? (
-            <>
-              <Loader2 className="animate-spin" size={18} />
-              Enviando correo de prueba...
-            </>
-          ) : (
-            <>
-              <Mail size={18} />
-              Enviar Correo de Prueba
-            </>
+          {testError && (
+            <div 
+              className="glass-container" 
+              style={{ 
+                background: 'rgba(239, 68, 68, 0.1)', 
+                borderColor: 'var(--danger)', 
+                padding: '12px 16px', 
+                borderRadius: 'var(--radius-md)', 
+                marginBottom: '20px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                color: '#ff8a8a',
+                fontSize: '0.9rem'
+              }}
+            >
+              <AlertCircle size={20} />
+              <span>{testError}</span>
+            </div>
           )}
-        </button>
-      </div>
+
+          {testSuccess && (
+            <div 
+              className="glass-container" 
+              style={{ 
+                background: 'rgba(16, 185, 129, 0.1)', 
+                borderColor: 'var(--success)', 
+                padding: '12px 16px', 
+                borderRadius: 'var(--radius-md)', 
+                marginBottom: '20px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                color: '#a7f3d0',
+                fontSize: '0.9rem'
+              }}
+            >
+              <CheckCircle2 size={20} />
+              <span>{testSuccess}</span>
+            </div>
+          )}
+
+          <button 
+            type="button" 
+            className="btn-secondary" 
+            style={{ width: '100%', padding: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+            onClick={handleSendTestEmail}
+            disabled={testLoading}
+          >
+            {testLoading ? (
+              <>
+                <Loader2 className="animate-spin" size={18} />
+                Enviando correo de prueba...
+              </>
+            ) : (
+              <>
+                <Mail size={18} />
+                Enviar Correo de Prueba
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

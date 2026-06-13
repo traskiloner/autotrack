@@ -40,7 +40,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.post('/api/auth/register', register);
 app.post('/api/auth/login', login);
 app.put('/api/users/profile', authMiddleware, updateProfile);
-app.post('/api/users/test-email', authMiddleware, sendTestEmailHandler);
+app.post('/api/users/test-email', authMiddleware, adminMiddleware, sendTestEmailHandler);
 
 
 // Admin Routes
