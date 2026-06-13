@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { initDb } from './db';
-import { register, login, updateProfile } from './controllers/authController';
+import { register, login, updateProfile, sendTestEmailHandler } from './controllers/authController';
 import { getCars, getCarById, createCar, updateCar, deleteCar, getCarShares, shareCar, unshareCar } from './controllers/carController';
 import { getMaintenances, createMaintenance, deleteMaintenance, getAllMaintenances } from './controllers/maintenanceController';
 import { getInventory, createInventoryPart, updateInventoryPart, deleteInventoryPart } from './controllers/inventoryController';
@@ -40,6 +40,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.post('/api/auth/register', register);
 app.post('/api/auth/login', login);
 app.put('/api/users/profile', authMiddleware, updateProfile);
+app.post('/api/users/test-email', authMiddleware, sendTestEmailHandler);
 
 
 // Admin Routes

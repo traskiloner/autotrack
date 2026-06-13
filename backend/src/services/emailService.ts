@@ -179,3 +179,19 @@ export async function sendNewAlertEmail(email: string, username: string, carDeta
   `;
   await sendMail(email, title, baseTemplate(title, content));
 }
+
+export async function sendTestEmail(email: string, username: string) {
+  const title = 'Correo de Prueba de AutoTrack';
+  const content = `
+    <p>Hola <strong>${username}</strong>,</p>
+    <p>Este es un correo electrónico de prueba enviado desde tu aplicación <strong>AutoTrack</strong> para verificar la configuración de tu servidor de correos (SMTP).</p>
+    <p>Si estás leyendo esto, significa que tu servidor de correo está configurado correctamente y listo para enviar notificaciones reales.</p>
+    <div class="highlight-box">
+      <strong>Servidor SMTP:</strong> ${host || 'Modo Simulado (Logs)'}<br/>
+      <strong>Puerto:</strong> ${port}<br/>
+      <strong>Conexión segura:</strong> ${port === 465 ? 'SSL (Directo)' : 'STARTTLS / No seguro'}
+    </div>
+    <p>¡Gracias por confiar en AutoTrack!</p>
+  `;
+  await sendMail(email, title, baseTemplate(title, content));
+}

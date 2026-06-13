@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../db';
 import { AuthenticatedRequest } from '../middlewares/auth';
-import { sendWelcomeEmail } from '../services/emailService';
+import { sendWelcomeEmail, sendTestEmail } from '../services/emailService';
 
 export async function register(req: Request, res: Response) {
   const { username, email, password } = req.body;
@@ -198,6 +198,30 @@ export async function updateProfile(req: AuthenticatedRequest, res: Response) {
   } catch (err) {
     console.error('Error updating profile:', err);
     res.status(500).json({ message: 'Error interno del servidor al actualizar perfil' });
+  }
+}
+
+export async function sendTestEmailHandler(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user?.id;
+
+  if (!userId) {
+    return res.status(401).json({ message: 'No autorizado' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    await sendTestEmail(user.email, user.username);
+    res.json({ message: 'Correo de prueba enviado correctamente' });
+  } catch (err) {
+    console.error('Error sending test email handler:', err);
+    res.status(500).json({ message: 'Error al enviar el correo de prueba' });
   }
 }
 
