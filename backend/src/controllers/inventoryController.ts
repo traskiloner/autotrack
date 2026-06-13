@@ -23,7 +23,7 @@ export async function getInventory(req: AuthenticatedRequest, res: Response) {
 
 export async function createInventoryPart(req: AuthenticatedRequest, res: Response) {
   const userId = req.user?.id;
-  const { name, brand, partNumber, price, stock } = req.body;
+  const { name, brand, partNumber, price, stock, purchaseUrl } = req.body;
 
   if (!name) {
     return res.status(400).json({ message: 'El nombre de la pieza es obligatorio' });
@@ -38,6 +38,7 @@ export async function createInventoryPart(req: AuthenticatedRequest, res: Respon
         part_number: partNumber || null,
         price: price !== undefined ? Number(price) : 0,
         stock: stock !== undefined ? Number(stock) : 0,
+        purchase_url: purchaseUrl || null,
       },
     });
     res.status(201).json(part);
@@ -50,7 +51,7 @@ export async function createInventoryPart(req: AuthenticatedRequest, res: Respon
 export async function updateInventoryPart(req: AuthenticatedRequest, res: Response) {
   const userId = req.user?.id;
   const partId = req.params.id;
-  const { name, brand, partNumber, price, stock } = req.body;
+  const { name, brand, partNumber, price, stock, purchaseUrl } = req.body;
 
   try {
     // Check ownership
@@ -75,6 +76,7 @@ export async function updateInventoryPart(req: AuthenticatedRequest, res: Respon
         part_number: partNumber !== undefined ? partNumber : undefined,
         price: price !== undefined ? Number(price) : undefined,
         stock: stock !== undefined ? Number(stock) : undefined,
+        purchase_url: purchaseUrl !== undefined ? (purchaseUrl || null) : undefined,
       },
     });
 

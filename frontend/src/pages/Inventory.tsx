@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Trash2, Search, Hash, Coins, Loader2, Edit3 } from 'lucide-react';
+import { Plus, Trash2, Search, Hash, Coins, Loader2, Edit3, ShoppingCart, ExternalLink } from 'lucide-react';
 import { InventoryPart } from '@autotrack/shared';
 
 export const Inventory: React.FC = () => {
@@ -18,6 +18,7 @@ export const Inventory: React.FC = () => {
   const [partNumber, setPartNumber] = useState('');
   const [price, setPrice] = useState(0);
   const [stock, setStock] = useState(0);
+  const [purchaseUrl, setPurchaseUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const fetchInventory = async () => {
@@ -42,6 +43,7 @@ export const Inventory: React.FC = () => {
     setPartNumber('');
     setPrice(0);
     setStock(0);
+    setPurchaseUrl('');
     setShowModal(true);
   };
 
@@ -52,6 +54,7 @@ export const Inventory: React.FC = () => {
     setPartNumber(part.part_number || '');
     setPrice(part.price);
     setStock(part.stock);
+    setPurchaseUrl(part.purchase_url || '');
     setShowModal(true);
   };
 
@@ -66,6 +69,7 @@ export const Inventory: React.FC = () => {
       partNumber,
       price: Number(price),
       stock: Number(stock),
+      purchaseUrl,
     };
 
     try {
@@ -236,6 +240,26 @@ export const Inventory: React.FC = () => {
                       <Coins size={14} style={{ color: 'var(--text-muted)' }} />
                       <span>Precio Unitario: <strong>{Number(part.price).toFixed(2)} €</strong></span>
                     </div>
+                    {part.purchase_url && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                        <ShoppingCart size={14} style={{ color: 'var(--text-muted)' }} />
+                        <a 
+                          href={part.purchase_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          style={{ 
+                            color: 'var(--primary-hover)', 
+                            textDecoration: 'underline', 
+                            display: 'inline-flex', 
+                            alignItems: 'center', 
+                            gap: '4px',
+                            fontWeight: 500
+                          }}
+                        >
+                          Comprar pieza <ExternalLink size={12} />
+                        </a>
+                      </div>
+                    )}
                   </div>
 
                   {/* Stock Tracker */}
@@ -353,6 +377,18 @@ export const Inventory: React.FC = () => {
                     min={0}
                   />
                 </div>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="part-purchase-url">Enlace de Compra (URL)</label>
+                <input
+                  type="url"
+                  id="part-purchase-url"
+                  className="form-control"
+                  placeholder="Ej. https://www.autodoc.es/..."
+                  value={purchaseUrl}
+                  onChange={(e) => setPurchaseUrl(e.target.value)}
+                />
               </div>
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>

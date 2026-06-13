@@ -54,6 +54,7 @@ export interface InventoryPart {
   part_number: string | null;
   price: number;
   stock: number;
+  purchase_url?: string | null;
 }
 
 export interface AlertData {
