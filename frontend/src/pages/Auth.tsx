@@ -109,7 +109,7 @@ export const Auth: React.FC = () => {
           <form onSubmit={handleSubmit}>
             {(!isLogin || setupRequired) && (
               <div className="form-group">
-                <label htmlFor="username">Nombre de usuario administrador</label>
+                <label htmlFor="username">{setupRequired ? 'Nombre de usuario administrador' : 'Nombre de usuario'}</label>
                 <div style={{ position: 'relative' }}>
                   <User 
                     size={18} 
@@ -125,7 +125,7 @@ export const Auth: React.FC = () => {
                     type="text"
                     id="username"
                     className="form-control"
-                    placeholder="ej. admin"
+                    placeholder={setupRequired ? 'ej. admin' : 'ej. Jose Luis'}
                     style={{ paddingLeft: '48px', width: '100%' }}
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
