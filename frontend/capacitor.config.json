@@ -1,0 +1,6 @@
+{
+  "appId": "com.traskiloner.autotrack",
+  "appName": "AutoTrack",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

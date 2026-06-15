@@ -35,6 +35,13 @@ pipeline {
             }
         }
 
+        stage('Auditoría de Seguridad') {
+            steps {
+                echo 'Ejecutando auditoría de dependencias en búsqueda de vulnerabilidades críticas...'
+                sh 'npm audit --audit-level=critical || true'
+            }
+        }
+
         stage('Compilar y Etiquetar Imágenes') {
             steps {
                 script {

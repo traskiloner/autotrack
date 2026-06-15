@@ -2,6 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import multer from 'multer';
 import { initDb } from './db';
 import { register, login, updateProfile, sendTestEmailHandler } from './controllers/authController';
 import { getCars, getCarById, createCar, updateCar, deleteCar, getCarShares, shareCar, unshareCar } from './controllers/carController';
@@ -25,22 +28,46 @@ import {
 
 dotenv.config();
 
+// Production security enforcement
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'super_secret_key_change_me_123') {
+    console.error('[CRITICAL] JWT_SECRET must be configured with a secure value in production.');
+    process.exit(1);
+  }
+}
+
 const app = express();
 const PORT = process.env.PORT || 5001;
 
-// Middlewares
+// Trust first proxy hop (e.g. Nginx, Portainer, etc.)
+app.set('trust proxy', 1);
+
+// Apply Helmet headers for security
+app.use(helmet());
+
+// Restrict CORS origins in production
 app.use(cors({
-  origin: '*', // Allow all origins for simplicity in development (Docker container orchestration)
+  origin: ['https://autotrack.traskiloner.com', 'http://localhost:4080'],
   credentials: true,
 }));
+
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Auth Routes
-app.post('/api/auth/register', register);
-app.post('/api/auth/login', login);
+// Configure rate limiting for authentication endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // limit each IP to 20 requests per windowMs
+  message: { message: 'Demasiadas peticiones desde esta IP. Por favor, inténtelo de nuevo en 15 minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Auth Routes (Rate Limited)
+app.post('/api/auth/register', authLimiter, register);
+app.post('/api/auth/login', authLimiter, login);
 app.put('/api/users/profile', authMiddleware, updateProfile);
-app.post('/api/users/test-email', authMiddleware, adminMiddleware, sendTestEmailHandler);
+app.post('/api/users/test-email', authLimiter, authMiddleware, adminMiddleware, sendTestEmailHandler);
 
 
 // Admin Routes
@@ -91,6 +118,15 @@ app.delete('/api/fuel/:id', authMiddleware, deleteFuelLog);
 // Upload Route (Protected)
 app.post('/api/upload', authMiddleware, upload.single('file'), handleUpload);
 
+
+// Error handling middleware for Multer and general errors
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err instanceof multer.MulterError || err.message === 'Solo se permiten imágenes (JPEG/PNG) y documentos PDF.') {
+    return res.status(400).json({ message: err.message });
+  }
+  console.error('Unhandled server error:', err);
+  res.status(500).json({ message: 'Error interno del servidor' });
+});
 
 // Health check
 app.get('/health', (req, res) => {

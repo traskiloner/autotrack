@@ -95,8 +95,16 @@ export async function login(req: Request, res: Response) {
     }
 
     // Update login stats
-    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
-    const ipStr = Array.isArray(rawIp) ? rawIp[0] : (typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : '');
+    const xff = req.headers['x-forwarded-for'];
+    const realIpHeader = req.headers['x-real-ip'];
+    const socketIp = req.socket.remoteAddress || '';
+
+    let ipStr = socketIp;
+    if (xff) {
+      ipStr = Array.isArray(xff) ? xff[0] : xff.split(',')[0].trim();
+    } else if (realIpHeader) {
+      ipStr = Array.isArray(realIpHeader) ? realIpHeader[0] : realIpHeader.trim();
+    }
 
     await prisma.user.update({
       where: { id: user.id },
