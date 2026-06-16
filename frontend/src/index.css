@@ -1371,5 +1371,88 @@ button, .btn {
   to { transform: translateY(0); }
 }
 
+/* Mobile Landscape Optimizations */
+@media (max-width: 950px) and (orientation: landscape) {
+  body {
+    padding-bottom: calc(55px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Safe Area Notch on Sides */
+  .navbar, .nav-links, .container {
+    padding-left: calc(16px + env(safe-area-inset-left, 0px)) !important;
+    padding-right: calc(16px + env(safe-area-inset-right, 0px)) !important;
+  }
+
+  /* Compact top navbar header */
+  .navbar-container {
+    height: 48px !important;
+  }
+
+  /* Compact bottom tab bar navigation */
+  .nav-links {
+    padding: 4px 0 !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+    box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.4) !important;
+  }
+
+  .nav-link {
+    flex-direction: row !important;
+    gap: 6px !important;
+    padding: 4px 0 !important;
+    font-size: 0.8rem !important;
+  }
+
+  .nav-icon {
+    width: 16px !important;
+    height: 16px !important;
+  }
+
+  /* Restore double-columns for forms because landscape is wide */
+  .form-row {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* Optimize Statistics Grid for wider horizontal space */
+  .stats-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 12px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .stat-card {
+    padding: 10px !important;
+    flex-direction: row !important;
+    text-align: left !important;
+    gap: 10px !important;
+  }
+
+  .stat-icon {
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: var(--radius-sm) !important;
+  }
+
+  .stat-icon svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  /* Centered popups instead of bottom sheets for landscape view */
+  .modal-overlay {
+    align-items: center !important;
+    padding: 16px !important;
+  }
+
+  .modal-content {
+    width: 95% !important;
+    max-width: 550px !important;
+    border-radius: var(--radius-md) !important;
+    max-height: 85vh !important;
+    padding: 16px 20px !important;
+    animation: fadeIn 0.2s ease-out forwards !important;
+  }
+}
+
 
 
