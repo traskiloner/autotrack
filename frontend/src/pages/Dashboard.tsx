@@ -420,7 +420,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectCar }) => {
             </div>
 
             <form onSubmit={handleAddCar}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div className="form-row">
                 <div className="form-group">
                   <label htmlFor="brand">Marca *</label>
                   <input
@@ -448,7 +448,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectCar }) => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div className="form-row">
                 <div className="form-group">
                   <label htmlFor="year">Año *</label>
                   <input
@@ -477,7 +477,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectCar }) => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div className="form-row">
                 <div className="form-group">
                   <label htmlFor="color">Color</label>
                   <input
@@ -503,7 +503,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectCar }) => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div className="form-row">
                 <div className="form-group">
                   <label htmlFor="vin">Número de Bastidor (VIN)</label>
                   <input
@@ -529,7 +529,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectCar }) => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div className="form-row">
                 <div className="form-group">
                   <label htmlFor="tireSize">Medida de Neumáticos</label>
                   <input

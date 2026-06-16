@@ -949,7 +949,7 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                       <h4 style={{ color: 'var(--warning)', fontSize: '1.05rem', fontWeight: 700, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <AlertTriangle size={16} /> Pendientes o en Progreso
                       </h4>
-                      <div className="alerts-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      <div className="alerts-grid form-row">
                         {alerts.filter(a => !a.is_completed).map((alert) => {
                           const status = getAlertStatus(alert, car.mileage);
                           const dailyKm = getAverageDailyMileage();
@@ -1461,7 +1461,7 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div className="form-row">
                 <div className="form-group">
                   <label htmlFor="maint-category">Categoría del Mantenimiento *</label>
                   <select
@@ -1572,7 +1572,7 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div className="form-row">
                 <div className="form-group">
                   <label htmlFor="maint-mileage">Kilómetros al realizar la revisión *</label>
                   <input
@@ -1692,7 +1692,7 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                             </select>
                           </div>
 
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                          <div className="form-row">
                             <div className="form-group" style={{ marginBottom: '0' }}>
                               <label>Nombre de la pieza *</label>
                               <input
@@ -1970,7 +1970,7 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                 )}
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div className="form-row">
                 <div className="form-group">
                   <label htmlFor="fuel-liters">Litros Repostados (L) *</label>
                   <input

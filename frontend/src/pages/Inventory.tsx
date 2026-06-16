@@ -325,7 +325,7 @@ export const Inventory: React.FC = () => {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div className="form-row">
                 <div className="form-group">
                   <label htmlFor="part-brand">Marca</label>
                   <input
@@ -351,7 +351,7 @@ export const Inventory: React.FC = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div className="form-row">
                 <div className="form-group">
                   <label htmlFor="part-price">Precio Unitario estimado (€)</label>
                   <input

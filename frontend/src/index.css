@@ -155,6 +155,12 @@ button, .btn {
 }
 
 /* Forms */
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
 .form-group {
   margin-bottom: 20px;
   display: flex;
@@ -1341,19 +1347,24 @@ button, .btn {
     align-items: flex-end; /* Align to bottom like native sheets */
   }
   
-  .modal-content {
-    width: 100% !important;
-    max-width: 100% !important;
-    border-bottom-left-radius: 0 !important;
-    border-bottom-right-radius: 0 !important;
-    border-top-left-radius: var(--radius-lg) !important;
-    border-top-right-radius: var(--radius-lg) !important;
-    padding: 24px 16px 40px 16px !important;
-    max-height: 90vh;
-    overflow-y: auto;
-    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    .modal-content {
+      width: 100% !important;
+      max-width: 100% !important;
+      border-bottom-left-radius: 0 !important;
+      border-bottom-right-radius: 0 !important;
+      border-top-left-radius: var(--radius-lg) !important;
+      border-top-right-radius: var(--radius-lg) !important;
+      padding: 24px 16px 40px 16px !important;
+      max-height: 90vh;
+      overflow-y: auto;
+      animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    .form-row {
+      grid-template-columns: 1fr !important;
+      gap: 12px;
+    }
   }
-}
 
 @keyframes slideUp {
   from { transform: translateY(100%); }
