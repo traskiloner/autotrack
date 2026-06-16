@@ -216,6 +216,7 @@ button, .btn {
   position: sticky;
   top: 0;
   z-index: 100;
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 .navbar-container {
