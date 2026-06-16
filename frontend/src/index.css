@@ -1226,7 +1226,7 @@ button, .btn {
 }
 
 /* Mobile responsive styling for a native-like experience */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-width: 950px) and (orientation: landscape) {
   /* Prevent scroll bouncing and text selection */
   body {
     user-select: none;
