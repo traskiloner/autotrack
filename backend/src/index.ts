@@ -47,7 +47,7 @@ app.use(helmet());
 
 // Restrict CORS origins in production
 app.use(cors({
-  origin: ['https://autotrack.traskiloner.com', 'http://localhost:4080'],
+  origin: ['https://autotrack.traskiloner.com', 'http://localhost:4080', 'http://localhost', 'capacitor://localhost'],
   credentials: true,
 }));
 
