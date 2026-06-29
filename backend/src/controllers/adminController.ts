@@ -78,11 +78,17 @@ export async function setupInitialAdmin(req: Request, res: Response) {
     // Generate JWT
     const secret = process.env.JWT_SECRET || 'super_secret_key_change_me_123';
     const token = jwt.sign({ id: admin.id, username: admin.username, role: admin.role }, secret, {
-      expiresIn: '7d',
+      expiresIn: '1h',
+    });
+
+    const refreshSecret = process.env.JWT_REFRESH_SECRET || (secret + '_refresh');
+    const refreshToken = jwt.sign({ id: admin.id, username: admin.username, role: admin.role, type: 'refresh' }, refreshSecret, {
+      expiresIn: '30d',
     });
 
     res.status(201).json({
       token,
+      refreshToken,
       user: admin
     });
   } catch (err) {

@@ -63,7 +63,7 @@ export const Profile: React.FC = () => {
       });
 
       // Update state and localStorage via auth context
-      login(data.token, data.user);
+      login(data.token, data.user, data.refreshToken);
       
       setSuccess('Tus detalles se han actualizado con éxito');
       setPassword('');

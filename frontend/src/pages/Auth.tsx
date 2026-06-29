@@ -47,10 +47,10 @@ export const Auth: React.FC = () => {
       });
 
       if (isLogin && !setupRequired) {
-        login(data.token, data.user);
+        login(data.token, data.user, data.refreshToken);
       } else {
         // Registering regular user or initial admin setup
-        registerUser(data.token, data.user);
+        registerUser(data.token, data.user, data.refreshToken);
       }
     } catch (err: any) {
       setError(err.message || 'Ocurrió un error inesperado');

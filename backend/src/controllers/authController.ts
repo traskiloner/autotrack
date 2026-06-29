@@ -54,11 +54,17 @@ export async function register(req: Request, res: Response) {
     // Generate JWT
     const secret = process.env.JWT_SECRET || 'super_secret_key_change_me_123';
     const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, secret, {
-      expiresIn: '7d',
+      expiresIn: '1h',
+    });
+
+    const refreshSecret = process.env.JWT_REFRESH_SECRET || (secret + '_refresh');
+    const refreshToken = jwt.sign({ id: user.id, username: user.username, role: user.role, type: 'refresh' }, refreshSecret, {
+      expiresIn: '30d',
     });
 
     res.status(201).json({
       token,
+      refreshToken,
       user,
     });
   } catch (err) {
@@ -118,11 +124,17 @@ export async function login(req: Request, res: Response) {
     // Generate JWT
     const secret = process.env.JWT_SECRET || 'super_secret_key_change_me_123';
     const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, secret, {
-      expiresIn: '7d',
+      expiresIn: '1h',
+    });
+
+    const refreshSecret = process.env.JWT_REFRESH_SECRET || (secret + '_refresh');
+    const refreshToken = jwt.sign({ id: user.id, username: user.username, role: user.role, type: 'refresh' }, refreshSecret, {
+      expiresIn: '30d',
     });
 
     res.json({
       token,
+      refreshToken,
       user: {
         id: user.id,
         username: user.username,
@@ -196,11 +208,17 @@ export async function updateProfile(req: AuthenticatedRequest, res: Response) {
     // Generate a new JWT token with updated info
     const secret = process.env.JWT_SECRET || 'super_secret_key_change_me_123';
     const token = jwt.sign({ id: updatedUser.id, username: updatedUser.username, role: updatedUser.role }, secret, {
-      expiresIn: '7d',
+      expiresIn: '1h',
+    });
+
+    const refreshSecret = process.env.JWT_REFRESH_SECRET || (secret + '_refresh');
+    const refreshToken = jwt.sign({ id: updatedUser.id, username: updatedUser.username, role: updatedUser.role, type: 'refresh' }, refreshSecret, {
+      expiresIn: '30d',
     });
 
     res.json({
       token,
+      refreshToken,
       user: updatedUser
     });
   } catch (err) {
@@ -232,4 +250,58 @@ export async function sendTestEmailHandler(req: AuthenticatedRequest, res: Respo
     res.status(500).json({ message: 'Error al enviar el correo de prueba' });
   }
 }
+
+export async function refresh(req: Request, res: Response) {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(400).json({ message: 'Refresh token es requerido' });
+  }
+
+  try {
+    const secret = process.env.JWT_SECRET || 'super_secret_key_change_me_123';
+    const refreshSecret = process.env.JWT_REFRESH_SECRET || (secret + '_refresh');
+    const decoded = jwt.verify(refreshToken, refreshSecret) as { id: number; username: string; role: string; type: string };
+
+    if (decoded.type !== 'refresh') {
+      return res.status(401).json({ message: 'Token de refresco no válido' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id }
+    });
+
+    if (!user) {
+      return res.status(401).json({ message: 'Usuario no encontrado' });
+    }
+
+    if (!user.is_active) {
+      return res.status(403).json({ message: 'Tu cuenta ha sido deshabilitada por el administrador' });
+    }
+
+    // Generate new access and refresh tokens
+    const newAccessToken = jwt.sign({ id: user.id, username: user.username, role: user.role }, secret, {
+      expiresIn: '1h',
+    });
+
+    const newRefreshToken = jwt.sign({ id: user.id, username: user.username, role: user.role, type: 'refresh' }, refreshSecret, {
+      expiresIn: '30d',
+    });
+
+    res.json({
+      token: newAccessToken,
+      refreshToken: newRefreshToken,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (err) {
+    console.error('Error in refresh token:', err);
+    return res.status(401).json({ message: 'Token de refresco no válido o expirado' });
+  }
+}
+
 

@@ -6,7 +6,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import { initDb } from './db';
-import { register, login, updateProfile, sendTestEmailHandler } from './controllers/authController';
+import { register, login, updateProfile, sendTestEmailHandler, refresh } from './controllers/authController';
 import { getCars, getCarById, createCar, updateCar, deleteCar, getCarShares, shareCar, unshareCar } from './controllers/carController';
 import { getMaintenances, createMaintenance, deleteMaintenance, getAllMaintenances } from './controllers/maintenanceController';
 import { getInventory, createInventoryPart, updateInventoryPart, deleteInventoryPart } from './controllers/inventoryController';
@@ -66,6 +66,7 @@ const authLimiter = rateLimit({
 // Auth Routes (Rate Limited)
 app.post('/api/auth/register', authLimiter, register);
 app.post('/api/auth/login', authLimiter, login);
+app.post('/api/auth/refresh', refresh);
 app.put('/api/users/profile', authMiddleware, updateProfile);
 app.post('/api/users/test-email', authLimiter, authMiddleware, adminMiddleware, sendTestEmailHandler);
 

@@ -12,8 +12,8 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   loading: boolean;
-  login: (token: string, user: User) => void;
-  registerUser: (token: string, user: User) => void;
+  login: (token: string, user: User, refreshToken?: string) => void;
+  registerUser: (token: string, user: User, refreshToken?: string) => void;
   logout: () => void;
   apiFetch: (path: string, options?: RequestInit) => Promise<any>;
 }
@@ -36,20 +36,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(false);
   }, []);
 
-  const login = (newToken: string, newUser: User) => {
+  const login = (newToken: string, newUser: User, newRefreshToken?: string) => {
     localStorage.setItem('token', newToken);
     localStorage.setItem('user', JSON.stringify(newUser));
+    if (newRefreshToken) {
+      localStorage.setItem('refreshToken', newRefreshToken);
+    }
     setToken(newToken);
     setUser(newUser);
   };
 
-  const registerUser = (newToken: string, newUser: User) => {
-    login(newToken, newUser);
+  const registerUser = (newToken: string, newUser: User, newRefreshToken?: string) => {
+    login(newToken, newUser, newRefreshToken);
   };
 
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('refreshToken');
     setToken(null);
     setUser(null);
   };
@@ -59,17 +63,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const url = `${apiBase}${path}`;
 
     const headers = new Headers(options.headers || {});
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
+    const currentToken = token || localStorage.getItem('token');
+    if (currentToken) {
+      headers.set('Authorization', `Bearer ${currentToken}`);
     }
     if (!(options.body instanceof FormData) && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
 
-    const res = await fetch(url, {
+    let res = await fetch(url, {
       ...options,
       headers,
     });
+
+    if (!res.ok) {
+      const currentRefreshToken = localStorage.getItem('refreshToken');
+      if (
+        res.status === 401 &&
+        currentRefreshToken &&
+        path !== '/api/auth/refresh' &&
+        path !== '/api/auth/login' &&
+        path !== '/api/auth/register'
+      ) {
+        try {
+          const refreshRes = await fetch(`${apiBase}/api/auth/refresh`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ refreshToken: currentRefreshToken }),
+          });
+
+          if (refreshRes.ok) {
+            const refreshData = await refreshRes.json();
+            // Update token context and localStorage
+            login(refreshData.token, refreshData.user, refreshData.refreshToken);
+
+            // Re-execute original request with new token
+            const newHeaders = new Headers(options.headers || {});
+            newHeaders.set('Authorization', `Bearer ${refreshData.token}`);
+            if (!(options.body instanceof FormData) && !newHeaders.has('Content-Type')) {
+              newHeaders.set('Content-Type', 'application/json');
+            }
+
+            res = await fetch(url, {
+              ...options,
+              headers: newHeaders,
+            });
+          } else {
+            logout();
+          }
+        } catch (refreshErr) {
+          console.error('Error refreshing token:', refreshErr);
+          logout();
+        }
+      }
+    }
 
     if (!res.ok) {
       let errorMessage = 'Ha ocurrido un error en el servidor';
