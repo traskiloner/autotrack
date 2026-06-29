@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { User, Mail, Lock, Save, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { User, Mail, Lock, Save, Loader2, AlertCircle, CheckCircle2, LogOut } from 'lucide-react';
 
 export const Profile: React.FC = () => {
   const { user, login, logout, apiFetch } = useAuth();
@@ -354,6 +354,22 @@ export const Profile: React.FC = () => {
           </button>
         </div>
       )}
+
+      <div className="glass-card animate-fade-in" style={{ padding: '28px', marginTop: '24px' }}>
+        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px', fontWeight: 600 }}>Cerrar Sesión</h2>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '20px', lineHeight: '1.5' }}>
+          Cierra tu sesión actual de AutoTrack en este dispositivo. Deberás volver a introducir tus credenciales para acceder.
+        </p>
+        <button 
+          type="button" 
+          className="btn-secondary" 
+          style={{ width: '100%', padding: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+          onClick={logout}
+        >
+          <LogOut size={18} />
+          Cerrar Sesión
+        </button>
+      </div>
 
       <div className="glass-card animate-fade-in" style={{ padding: '28px', marginTop: '24px', borderColor: 'rgba(239, 68, 68, 0.25)' }}>
         <h2 style={{ fontSize: '1.2rem', marginBottom: '12px', fontWeight: 600, color: 'var(--danger)' }}>Zona de Peligro</h2>
