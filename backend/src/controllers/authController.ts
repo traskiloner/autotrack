@@ -304,4 +304,45 @@ export async function refresh(req: Request, res: Response) {
   }
 }
 
+export async function deleteAccount(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user?.id;
+
+  if (!userId) {
+    return res.status(401).json({ message: 'No autorizado' });
+  }
+
+  try {
+    const userToDelete = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!userToDelete) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    // Safety guard: prevent deleting the last admin
+    if (userToDelete.role === 'admin') {
+      const adminCount = await prisma.user.count({
+        where: { role: 'admin' }
+      });
+      if (adminCount <= 1) {
+        return res.status(400).json({
+          message: 'No puedes eliminar tu cuenta porque eres el único administrador del sistema.'
+        });
+      }
+    }
+
+    // Delete the user (this will cascade delete all associated cars, maintenances, etc.)
+    await prisma.user.delete({
+      where: { id: userId }
+    });
+
+    res.status(204).send();
+  } catch (err) {
+    console.error('Error deleting account:', err);
+    res.status(500).json({ message: 'Error interno del servidor al eliminar la cuenta' });
+  }
+}
+
+
 

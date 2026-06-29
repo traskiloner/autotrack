@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { User, Mail, Lock, Save, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export const Profile: React.FC = () => {
-  const { user, login, apiFetch } = useAuth();
+  const { user, login, logout, apiFetch } = useAuth();
   
   const [username, setUsername] = useState(user?.username || '');
   const [email, setEmail] = useState(user?.email || '');
@@ -17,6 +17,10 @@ export const Profile: React.FC = () => {
   const [testLoading, setTestLoading] = useState(false);
   const [testError, setTestError] = useState<string | null>(null);
   const [testSuccess, setTestSuccess] = useState<string | null>(null);
+
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const handleSendTestEmail = async () => {
     setTestLoading(true);
@@ -32,6 +36,22 @@ export const Profile: React.FC = () => {
       setTestError(err.message || 'Error al enviar el correo de prueba');
     } finally {
       setTestLoading(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleteLoading(true);
+    setDeleteError(null);
+
+    try {
+      await apiFetch('/api/users/profile', {
+        method: 'DELETE',
+      });
+      logout();
+    } catch (err: any) {
+      setDeleteError(err.message || 'Error al eliminar la cuenta');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -334,6 +354,72 @@ export const Profile: React.FC = () => {
           </button>
         </div>
       )}
+
+      <div className="glass-card animate-fade-in" style={{ padding: '28px', marginTop: '24px', borderColor: 'rgba(239, 68, 68, 0.25)' }}>
+        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px', fontWeight: 600, color: 'var(--danger)' }}>Zona de Peligro</h2>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '20px', lineHeight: '1.5' }}>
+          Una vez que elimines tu cuenta, no se podrá recuperar. Todos tus vehículos, registros de mantenimiento, inventario y alertas asociadas se borrarán permanentemente.
+        </p>
+
+        {deleteError && (
+          <div 
+            className="glass-container" 
+            style={{ 
+              background: 'rgba(239, 68, 68, 0.1)', 
+              borderColor: 'var(--danger)', 
+              padding: '12px 16px', 
+              borderRadius: 'var(--radius-md)', 
+              marginBottom: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              color: '#ff8a8a',
+              fontSize: '0.9rem'
+            }}
+          >
+            <AlertCircle size={20} />
+            <span>{deleteError}</span>
+          </div>
+        )}
+
+        {showConfirmDelete ? (
+          <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px dashed rgba(239, 68, 68, 0.3)', padding: '18px', borderRadius: 'var(--radius-md)', marginBottom: '10px' }}>
+            <p style={{ fontSize: '0.9rem', marginBottom: '16px', fontWeight: 500, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertCircle size={18} style={{ color: 'var(--danger)' }} />
+              ¿Estás completamente seguro de que deseas eliminar tu cuenta? Esta acción es irreversible.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              <button 
+                type="button" 
+                className="btn-danger" 
+                style={{ flex: 1, minWidth: '150px', padding: '12px' }}
+                onClick={handleDeleteAccount}
+                disabled={deleteLoading}
+              >
+                {deleteLoading ? 'Eliminando...' : 'Sí, eliminar permanentemente'}
+              </button>
+              <button 
+                type="button" 
+                className="btn-secondary" 
+                style={{ flex: 1, minWidth: '100px', padding: '12px' }}
+                onClick={() => setShowConfirmDelete(false)}
+                disabled={deleteLoading}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button 
+            type="button" 
+            className="btn-secondary" 
+            style={{ width: '100%', padding: '14px', borderColor: 'rgba(239, 68, 68, 0.4)', color: '#ff8a8a', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+            onClick={() => setShowConfirmDelete(true)}
+          >
+            <span>🗑️</span> Eliminar Cuenta
+          </button>
+        )}
+      </div>
     </div>
   );
 };
