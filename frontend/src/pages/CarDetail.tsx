@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ArrowLeft, Plus, Trash2, Calendar, Milestone, Coins, Layers, Wrench, AlertTriangle, Loader2, Check, Bell, BellOff, Fuel, Droplet, TrendingUp, X, FileText } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Calendar, Milestone, Coins, Layers, Wrench, AlertTriangle, Loader2, Check, Bell, BellOff, Fuel, Droplet, TrendingUp, X, FileText, Edit3 } from 'lucide-react';
 import { Maintenance, CarData, Alert, InventoryPart, FuelLog } from '@autotrack/shared';
 
 interface CarDetailProps {
@@ -107,6 +107,20 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [submittingMaint, setSubmittingMaint] = useState(false);
 
+  // Edit Car Modal States
+  const [showEditCarModal, setShowEditCarModal] = useState(false);
+  const [editBrand, setEditBrand] = useState('');
+  const [editModel, setEditModel] = useState('');
+  const [editYear, setEditYear] = useState(new Date().getFullYear());
+  const [editLicensePlate, setEditLicensePlate] = useState('');
+  const [editColor, setEditColor] = useState('');
+  const [editMileage, setEditMileage] = useState(0);
+  const [editEngineCode, setEditEngineCode] = useState('');
+  const [editVin, setEditVin] = useState('');
+  const [editTireSize, setEditTireSize] = useState('');
+  const [editOilType, setEditOilType] = useState('');
+  const [savingCar, setSavingCar] = useState(false);
+
   // New Alert Form State
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [alertDesc, setAlertDesc] = useState('');
@@ -154,6 +168,52 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
   useEffect(() => {
     fetchData();
   }, [carId]);
+
+  const openEditCarModal = () => {
+    if (!car) return;
+    setEditBrand(car.brand);
+    setEditModel(car.model);
+    setEditYear(car.year);
+    setEditLicensePlate(car.license_plate);
+    setEditColor(car.color || '');
+    setEditMileage(car.mileage);
+    setEditEngineCode(car.engine_code || '');
+    setEditVin(car.vin || '');
+    setEditTireSize(car.tire_size || '');
+    setEditOilType(car.oil_type || '');
+    setShowEditCarModal(true);
+  };
+
+  const handleSaveCar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingCar(true);
+    setError(null);
+
+    try {
+      const updatedCar = await apiFetch(`/api/cars/${carId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          brand: editBrand,
+          model: editModel,
+          year: Number(editYear),
+          licensePlate: editLicensePlate,
+          color: editColor,
+          mileage: Number(editMileage),
+          engineCode: editEngineCode,
+          vin: editVin,
+          tireSize: editTireSize,
+          oilType: editOilType,
+        }),
+      });
+
+      setCar(updatedCar);
+      setShowEditCarModal(false);
+    } catch (err: any) {
+      setError(err.message || 'Error al guardar los cambios del vehículo');
+    } finally {
+      setSavingCar(false);
+    }
+  };
 
   const fetchShares = async () => {
     try {
@@ -707,6 +767,11 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
               setShowFuelModal(true);
             }} style={{ background: 'var(--success)', boxShadow: '0 4px 15px var(--success-glow)' }}>
               <Fuel size={18} /> Registrar Repostaje
+            </button>
+          )}
+          {car.user_id === currentUser?.id && (
+            <button className="btn-secondary" onClick={openEditCarModal}>
+              <Edit3 size={18} /> Editar Detalles
             </button>
           )}
           <button className="btn-secondary" onClick={handleExportCSV}>
@@ -2034,6 +2099,164 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                 </button>
                 <button type="submit" className="btn-primary" disabled={submittingFuel} style={{ background: 'var(--success)', boxShadow: '0 4px 15px var(--success-glow)' }}>
                   {submittingFuel ? 'Registrando...' : 'Registrar Repostaje'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Car Modal */}
+      {showEditCarModal && (
+        <div className="modal-overlay" onClick={() => setShowEditCarModal(false)}>
+          <div className="glass-card modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Editar Vehículo</h3>
+              <button className="modal-close" onClick={() => setShowEditCarModal(false)}>×</button>
+            </div>
+
+            <form onSubmit={handleSaveCar}>
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="edit-brand">Marca *</label>
+                  <input
+                    type="text"
+                    id="edit-brand"
+                    className="form-control"
+                    placeholder="Ej. Ford, Toyota, BMW"
+                    value={editBrand}
+                    onChange={(e) => setEditBrand(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="edit-model">Modelo *</label>
+                  <input
+                    type="text"
+                    id="edit-model"
+                    className="form-control"
+                    placeholder="Ej. Focus, Corolla, M3"
+                    value={editModel}
+                    onChange={(e) => setEditModel(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="edit-year">Año *</label>
+                  <input
+                    type="number"
+                    id="edit-year"
+                    className="form-control"
+                    value={editYear}
+                    onChange={(e) => setEditYear(Number(e.target.value))}
+                    min={1900}
+                    max={new Date().getFullYear() + 1}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="edit-licensePlate">Matrícula *</label>
+                  <input
+                    type="text"
+                    id="edit-licensePlate"
+                    className="form-control"
+                    placeholder="Ej. 1234ABC"
+                    value={editLicensePlate}
+                    onChange={(e) => setEditLicensePlate(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="edit-color">Color</label>
+                  <input
+                    type="text"
+                    id="edit-color"
+                    className="form-control"
+                    placeholder="Ej. Rojo, Gris Metalizado"
+                    value={editColor}
+                    onChange={(e) => setEditColor(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="edit-mileage">Kilómetros Actuales</label>
+                  <input
+                    type="number"
+                    id="edit-mileage"
+                    className="form-control"
+                    value={editMileage}
+                    onChange={(e) => setEditMileage(Number(e.target.value))}
+                    min={0}
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="edit-vin">Número de Bastidor (VIN)</label>
+                  <input
+                    type="text"
+                    id="edit-vin"
+                    className="form-control"
+                    placeholder="Ej. WBA..."
+                    value={editVin}
+                    onChange={(e) => setEditVin(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="edit-engineCode">Código de Motor</label>
+                  <input
+                    type="text"
+                    id="edit-engineCode"
+                    className="form-control"
+                    placeholder="Ej. 1.9 TDI ASZ / B58"
+                    value={editEngineCode}
+                    onChange={(e) => setEditEngineCode(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="edit-tireSize">Medida de Neumáticos</label>
+                  <input
+                    type="text"
+                    id="edit-tireSize"
+                    className="form-control"
+                    placeholder="Ej. 225/45 R17"
+                    value={editTireSize}
+                    onChange={(e) => setEditTireSize(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="edit-oilType">Tipo de Aceite Recomendado</label>
+                  <input
+                    type="text"
+                    id="edit-oilType"
+                    className="form-control"
+                    placeholder="Ej. 5W-30 LL-04"
+                    value={editOilType}
+                    onChange={(e) => setEditOilType(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                <button type="button" className="btn-secondary" onClick={() => setShowEditCarModal(false)}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-primary" disabled={savingCar}>
+                  {savingCar ? 'Guardando...' : 'Guardar Cambios'}
                 </button>
               </div>
             </form>
