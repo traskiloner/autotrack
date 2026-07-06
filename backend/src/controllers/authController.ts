@@ -59,7 +59,7 @@ export async function register(req: Request, res: Response) {
 
     const refreshSecret = process.env.JWT_REFRESH_SECRET || (secret + '_refresh');
     const refreshToken = jwt.sign({ id: user.id, username: user.username, role: user.role, type: 'refresh' }, refreshSecret, {
-      expiresIn: '30d',
+      expiresIn: '365d',
     });
 
     res.status(201).json({
@@ -129,7 +129,7 @@ export async function login(req: Request, res: Response) {
 
     const refreshSecret = process.env.JWT_REFRESH_SECRET || (secret + '_refresh');
     const refreshToken = jwt.sign({ id: user.id, username: user.username, role: user.role, type: 'refresh' }, refreshSecret, {
-      expiresIn: '30d',
+      expiresIn: '365d',
     });
 
     res.json({
@@ -213,7 +213,7 @@ export async function updateProfile(req: AuthenticatedRequest, res: Response) {
 
     const refreshSecret = process.env.JWT_REFRESH_SECRET || (secret + '_refresh');
     const refreshToken = jwt.sign({ id: updatedUser.id, username: updatedUser.username, role: updatedUser.role, type: 'refresh' }, refreshSecret, {
-      expiresIn: '30d',
+      expiresIn: '365d',
     });
 
     res.json({
@@ -285,7 +285,7 @@ export async function refresh(req: Request, res: Response) {
     });
 
     const newRefreshToken = jwt.sign({ id: user.id, username: user.username, role: user.role, type: 'refresh' }, refreshSecret, {
-      expiresIn: '30d',
+      expiresIn: '365d',
     });
 
     res.json({

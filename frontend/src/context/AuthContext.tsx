@@ -128,6 +128,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (e) {
         // Fallback to text or generic error
       }
+
+      // Auto-logout if token is invalid or expired
+      if (res.status === 401 || res.status === 403 || errorMessage === 'Token is not valid' || errorMessage === 'No token, authorization denied') {
+        logout();
+      }
+
       throw new Error(errorMessage);
     }
 
