@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Mail, Lock, User, AlertCircle, ShieldAlert } from 'lucide-react';
+import { PrivacyPolicyModal } from '../components/PrivacyPolicyModal';
 
 export const Auth: React.FC = () => {
   const { login, registerUser, apiFetch } = useAuth();
@@ -11,6 +12,7 @@ export const Auth: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
 
   useEffect(() => {
     const checkSetup = async () => {
@@ -197,8 +199,29 @@ export const Auth: React.FC = () => {
             </button>
           </form>
 
+          <div style={{ 
+            marginTop: '16px', 
+            fontSize: '0.8rem', 
+            color: 'var(--text-muted)', 
+            textAlign: 'center', 
+            lineHeight: '1.4' 
+          }}>
+            Al registrarte o iniciar sesión, aceptas nuestra{' '}
+            <span 
+              style={{ 
+                color: 'var(--primary)', 
+                textDecoration: 'underline', 
+                cursor: 'pointer',
+                fontWeight: 500
+              }}
+              onClick={() => setIsPrivacyOpen(true)}
+            >
+              Política de Privacidad
+            </span>.
+          </div>
+
           {!setupRequired && (
-            <div className="auth-toggle">
+            <div className="auth-toggle" style={{ marginTop: '20px' }}>
               {isLogin ? '¿No tienes cuenta?' : '¿Ya tienes cuenta?'}
               <span 
                 className="auth-toggle-link" 
@@ -213,6 +236,7 @@ export const Auth: React.FC = () => {
           )}
         </div>
       </div>
+      <PrivacyPolicyModal isOpen={isPrivacyOpen} onClose={() => setIsPrivacyOpen(false)} />
     </div>
   );
 };

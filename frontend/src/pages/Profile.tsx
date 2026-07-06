@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { User, Mail, Lock, Save, Loader2, AlertCircle, CheckCircle2, LogOut } from 'lucide-react';
+import { User, Mail, Lock, Save, Loader2, AlertCircle, CheckCircle2, LogOut, Shield } from 'lucide-react';
+import { PrivacyPolicyModal } from '../components/PrivacyPolicyModal';
 
 export const Profile: React.FC = () => {
   const { user, login, logout, apiFetch } = useAuth();
@@ -21,6 +22,7 @@ export const Profile: React.FC = () => {
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
 
   const handleSendTestEmail = async () => {
     setTestLoading(true);
@@ -356,6 +358,24 @@ export const Profile: React.FC = () => {
       )}
 
       <div className="glass-card animate-fade-in" style={{ padding: '28px', marginTop: '24px' }}>
+        <h2 style={{ fontSize: '1.2rem', marginBottom: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span>🛡️</span> Legal y Privacidad
+        </h2>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '20px', lineHeight: '1.5' }}>
+          Consulta nuestra política sobre el tratamiento de tus datos personales, almacenamiento de información y tus derechos ARCO.
+        </p>
+        <button 
+          type="button" 
+          className="btn-secondary" 
+          style={{ width: '100%', padding: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+          onClick={() => setIsPrivacyOpen(true)}
+        >
+          <Shield size={18} style={{ color: 'var(--primary)' }} />
+          Ver Política de Privacidad
+        </button>
+      </div>
+
+      <div className="glass-card animate-fade-in" style={{ padding: '28px', marginTop: '24px' }}>
         <h2 style={{ fontSize: '1.2rem', marginBottom: '12px', fontWeight: 600 }}>Cerrar Sesión</h2>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '20px', lineHeight: '1.5' }}>
           Cierra tu sesión actual de AutoTrack en este dispositivo. Deberás volver a introducir tus credenciales para acceder.
@@ -436,6 +456,7 @@ export const Profile: React.FC = () => {
           </button>
         )}
       </div>
+      <PrivacyPolicyModal isOpen={isPrivacyOpen} onClose={() => setIsPrivacyOpen(false)} />
     </div>
   );
 };
