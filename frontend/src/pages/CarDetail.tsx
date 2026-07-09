@@ -93,9 +93,11 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
   // New Checklist Item State
   const [newChecklistItem, setNewChecklistItem] = useState('');
 
-  // New Maintenance Form State
+  // Maintenance Form State
   const [showMaintModal, setShowMaintModal] = useState(false);
+  const [editingMaintId, setEditingMaintId] = useState<number | null>(null);
   const [description, setDescription] = useState('');
+  const [details, setDetails] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [mileage, setMileage] = useState(0);
   const [cost, setCost] = useState(0);
@@ -326,6 +328,26 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
     window.print();
   };
 
+  const openEditMaintenance = (maint: Maintenance) => {
+    setEditingMaintId(maint.id);
+    setDescription(maint.description);
+    setDetails(maint.details || '');
+    setMileage(maint.mileage);
+    setCost(maint.cost);
+    setDate(new Date(maint.date).toISOString().split('T')[0]);
+    setCategory(maint.category || 'Otros');
+    setDocumentPath(maint.document_path || '');
+    setChecklist(typeof maint.checklist === 'string' ? JSON.parse(maint.checklist) : (maint.checklist || []));
+    setParts(maint.parts.map(p => ({
+      partName: p.part_name,
+      brand: p.brand || '',
+      partNumber: p.part_number || '',
+      quantity: p.quantity,
+      price: p.price,
+    })));
+    setShowMaintModal(true);
+  };
+
   const handleAddMaintenance = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmittingMaint(true);
@@ -334,32 +356,51 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
     const filteredParts = parts.filter((p) => p.partName.trim() !== '');
 
     try {
-      await apiFetch(`/api/cars/${carId}/maintenance`, {
-        method: 'POST',
-        body: JSON.stringify({
-          description,
-          date,
-          mileage: Number(mileage),
-          cost: Number(cost),
-          category,
-          documentPath,
-          checklist,
-          parts: filteredParts.map(p => ({
-            partName: p.partName,
-            brand: p.brand,
-            partNumber: p.partNumber,
-            quantity: Number(p.quantity),
-            price: Number(p.price),
-            inventoryPartId: p.inventoryPartId,
-          })),
-        }),
-      });
+      if (editingMaintId) {
+        await apiFetch(`/api/maintenance/${editingMaintId}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            description,
+            details,
+            date,
+            mileage: Number(mileage),
+            cost: Number(cost),
+            category,
+            documentPath,
+            checklist,
+          }),
+        });
+      } else {
+        await apiFetch(`/api/cars/${carId}/maintenance`, {
+          method: 'POST',
+          body: JSON.stringify({
+            description,
+            details,
+            date,
+            mileage: Number(mileage),
+            cost: Number(cost),
+            category,
+            documentPath,
+            checklist,
+            parts: filteredParts.map(p => ({
+              partName: p.partName,
+              brand: p.brand,
+              partNumber: p.partNumber,
+              quantity: Number(p.quantity),
+              price: Number(p.price),
+              inventoryPartId: p.inventoryPartId,
+            })),
+          }),
+        });
+      }
 
       // Re-fetch all data to ensure inventory list is synced with new stock and mileage
       await fetchData();
 
       setShowMaintModal(false);
+      setEditingMaintId(null);
       setDescription('');
+      setDetails('');
       setDate(new Date().toISOString().split('T')[0]);
       setCost(0);
       setParts([]);
@@ -368,7 +409,7 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
       setChecklist([]);
       setUploadedFileName('');
     } catch (err: any) {
-      setError(err.message || 'Error al añadir el mantenimiento');
+      setError(err.message || 'Error al guardar el mantenimiento');
     } finally {
       setSubmittingMaint(false);
     }
@@ -729,7 +770,8 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
   }
 
   return (
-    <div className="container animate-fade-in" style={{ paddingBottom: '60px' }}>
+    <>
+      <div className="container animate-fade-in" style={{ paddingBottom: '60px' }}>
       {/* Header / Nav */}
       <div className="back-btn" onClick={onBack}>
         <ArrowLeft size={18} /> Volver al Dashboard
@@ -895,8 +937,16 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                           </span>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span className="timeline-cost">{Number(maint.cost).toFixed(2)} €</span>
+                          <button 
+                            className="btn-secondary" 
+                            style={{ padding: '6px', background: 'transparent', borderColor: 'transparent', color: 'var(--text-primary)' }}
+                            onClick={() => openEditMaintenance(maint)}
+                            title="Editar mantenimiento"
+                          >
+                            <Edit3 size={15} />
+                          </button>
                           <button 
                             className="btn-secondary" 
                             style={{ padding: '6px', background: 'transparent', borderColor: 'transparent', color: 'var(--text-muted)' }}
@@ -909,7 +959,12 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                       </div>
 
                       <div className="timeline-body">
-                        <p style={{ fontWeight: 500, fontSize: '1.05rem', marginBottom: '8px' }}>{maint.description}</p>
+                        <p style={{ fontWeight: 500, fontSize: '1.05rem', marginBottom: maint.details ? '4px' : '8px' }}>{maint.description}</p>
+                        {maint.details && (
+                          <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '12px', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+                            {maint.details}
+                          </p>
+                        )}
                         
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px', flexWrap: 'wrap' }}>
                           <span style={{ 
@@ -1502,8 +1557,15 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
         <div className="modal-overlay" onClick={() => setShowMaintModal(false)}>
           <div className="glass-card modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '680px' }}>
             <div className="modal-header">
-              <h3>Registrar Mantenimiento</h3>
-              <button className="modal-close" onClick={() => setShowMaintModal(false)}>×</button>
+              <h3>{editingMaintId ? 'Editar Mantenimiento' : 'Registrar Mantenimiento'}</h3>
+              <button className="modal-close" onClick={() => {
+                setShowMaintModal(false);
+                setEditingMaintId(null);
+                setDescription('');
+                setDetails('');
+                setParts([]);
+                setCost(0);
+              }}>×</button>
             </div>
 
             {error && (
@@ -1523,6 +1585,19 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="maint-details">Detalles adicionales</label>
+                <textarea
+                  id="maint-details"
+                  className="form-control"
+                  placeholder="Añade notas, observaciones o detalles específicos de la reparación..."
+                  value={details}
+                  onChange={(e) => setDetails(e.target.value)}
+                  rows={3}
+                  style={{ resize: 'vertical' }}
                 />
               </div>
 
@@ -1923,7 +1998,7 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                   Cancelar
                 </button>
                 <button type="submit" className="btn-primary" disabled={submittingMaint}>
-                  {submittingMaint ? 'Registrando...' : 'Registrar Mantenimiento'}
+                  {submittingMaint ? 'Guardando...' : (editingMaintId ? 'Guardar Cambios' : 'Registrar Mantenimiento')}
                 </button>
               </div>
             </form>
@@ -2319,5 +2394,6 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
         </div>
       )}
     </div>
+    </>
   );
 };

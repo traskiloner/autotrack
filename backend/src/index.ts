@@ -8,7 +8,7 @@ import multer from 'multer';
 import { initDb } from './db';
 import { register, login, updateProfile, sendTestEmailHandler, refresh, deleteAccount } from './controllers/authController';
 import { getCars, getCarById, createCar, updateCar, deleteCar, getCarShares, shareCar, unshareCar } from './controllers/carController';
-import { getMaintenances, createMaintenance, deleteMaintenance, getAllMaintenances } from './controllers/maintenanceController';
+import { getMaintenances, createMaintenance, deleteMaintenance, getAllMaintenances, updateMaintenance } from './controllers/maintenanceController';
 import { getInventory, createInventoryPart, updateInventoryPart, deleteInventoryPart } from './controllers/inventoryController';
 import { getUserAlerts, getCarAlerts, createAlert, completeAlert, deleteAlert } from './controllers/alertController';
 import { upload, handleUpload } from './controllers/uploadController';
@@ -98,6 +98,7 @@ app.get('/api/maintenances', authMiddleware, getAllMaintenances);
 app.get('/api/cars/:carId/maintenance', authMiddleware, getMaintenances);
 app.post('/api/cars/:carId/maintenance', authMiddleware, createMaintenance);
 app.delete('/api/maintenance/:id', authMiddleware, deleteMaintenance);
+app.put('/api/maintenance/:id', authMiddleware, updateMaintenance);
 
 // Inventory Routes (Protected)
 app.get('/api/inventory', authMiddleware, getInventory);

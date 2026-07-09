@@ -10,6 +10,7 @@ export interface Part {
 export interface Maintenance {
   id: number;
   description: string;
+  details?: string;
   mileage: number;
   cost: number;
   date: string;
@@ -74,6 +75,7 @@ export interface MaintenanceData {
   id: number;
   car_id: number;
   description: string;
+  details?: string;
   mileage: number;
   cost: number;
   date: string;

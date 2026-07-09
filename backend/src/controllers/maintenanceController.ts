@@ -260,3 +260,53 @@ export async function getAllMaintenances(req: AuthenticatedRequest, res: Respons
     res.status(500).json({ message: 'Error al obtener los mantenimientos' });
   }
 }
+
+export async function updateMaintenance(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user?.id;
+  const maintenanceId = req.params.id;
+  const { description, details, mileage, cost, date, category, documentPath, checklist } = req.body;
+
+  if (!description || !mileage || !date) {
+    return res.status(400).json({ message: 'Descripción, kilometraje y fecha son obligatorios' });
+  }
+
+  try {
+    // Verify ownership via join
+    const maintCheck = await prisma.maintenance.findFirst({
+      where: {
+        id: Number(maintenanceId),
+        car: {
+          OR: [
+            { user_id: userId },
+            { shares: { some: { user_id: userId } } }
+          ]
+        },
+      },
+    });
+
+    if (!maintCheck) {
+      return res.status(403).json({ message: 'No autorizado para editar este mantenimiento' });
+    }
+
+    const updatedMaintenance = await prisma.maintenance.update({
+      where: {
+        id: Number(maintenanceId),
+      },
+      data: {
+        description,
+        details: details || null,
+        mileage: Number(mileage),
+        cost: cost ? Number(cost) : 0,
+        date: new Date(date),
+        category: category || 'Otros',
+        document_path: documentPath || null,
+        checklist: checklist || [],
+      },
+    });
+
+    res.json(updatedMaintenance);
+  } catch (err) {
+    console.error('Error updating maintenance:', err);
+    res.status(500).json({ message: 'Error al actualizar el mantenimiento' });
+  }
+}
