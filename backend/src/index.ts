@@ -12,7 +12,7 @@ import { getMaintenances, createMaintenance, deleteMaintenance, getAllMaintenanc
 import { getInventory, createInventoryPart, updateInventoryPart, deleteInventoryPart } from './controllers/inventoryController';
 import { getUserAlerts, getCarAlerts, createAlert, completeAlert, deleteAlert } from './controllers/alertController';
 import { upload, handleUpload } from './controllers/uploadController';
-import { getCarFuelLogs, createFuelLog, deleteFuelLog } from './controllers/fuelController';
+import { getCarFuelLogs, createFuelLog, updateFuelLog, deleteFuelLog } from './controllers/fuelController';
 import { authMiddleware, adminMiddleware } from './middlewares/auth';
 import {
   checkAdminSetup,
@@ -116,6 +116,7 @@ app.delete('/api/alerts/:id', authMiddleware, deleteAlert);
 // Fuel Routes (Protected)
 app.get('/api/cars/:carId/fuel', authMiddleware, getCarFuelLogs);
 app.post('/api/cars/:carId/fuel', authMiddleware, createFuelLog);
+app.put('/api/fuel/:id', authMiddleware, updateFuelLog);
 app.delete('/api/fuel/:id', authMiddleware, deleteFuelLog);
 
 // Upload Route (Protected)

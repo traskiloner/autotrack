@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../db';
+import { deleteUploadedFile } from './uploadController';
 
 interface PartInput {
   partName: string;
@@ -203,6 +204,8 @@ export async function deleteMaintenance(req: AuthenticatedRequest, res: Response
       });
     });
 
+    deleteUploadedFile(maintCheck.document_path);
+
     res.json({ message: 'Mantenimiento eliminado correctamente' });
   } catch (err) {
     console.error('Error deleting maintenance:', err);
@@ -303,6 +306,11 @@ export async function updateMaintenance(req: AuthenticatedRequest, res: Response
         checklist: checklist || [],
       },
     });
+
+    // Remove the previous document if it was removed or replaced
+    if (maintCheck.document_path && maintCheck.document_path !== (documentPath || null)) {
+      deleteUploadedFile(maintCheck.document_path);
+    }
 
     res.json(updatedMaintenance);
   } catch (err) {
