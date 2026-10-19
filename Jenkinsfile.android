@@ -1,0 +1,109 @@
+// Pipeline de Android: compila el AAB firmado y lo sube a Google Play.
+// Crear en Jenkins un job "Multibranch" (o Pipeline) apuntando a este fichero
+// (Script Path: Jenkinsfile.android). Pensado para ejecutarse con tags (p. ej. v1.2.0).
+pipeline {
+    // Imagen con JDK 21 + Android SDK + Node + fastlane (frontend/android/ci/Dockerfile)
+    agent {
+        dockerfile {
+            filename 'frontend/android/ci/Dockerfile'
+            dir '.'
+            // Cache de Gradle entre builds para acelerar la compilación
+            args '-v gradle-cache:/root/.gradle'
+        }
+    }
+
+    parameters {
+        choice(name: 'PLAY_TRACK', choices: ['internal', 'alpha', 'beta', 'production'], description: 'Track de Google Play donde publicar')
+        booleanParam(name: 'UPLOAD_TO_PLAY', defaultValue: true, description: 'Subir el AAB a Google Play (si no, solo se compila y se archiva)')
+        string(name: 'VERSION_CODE_OFFSET', defaultValue: '2', description: 'Se suma al nº de build para obtener el versionCode (debe ser siempre mayor que el último subido a Play)')
+    }
+
+    environment {
+        API_URL = 'https://autotrack.traskiloner.com'
+
+        // Credenciales configuradas en Jenkins (Manage Jenkins > Credentials)
+        KEYSTORE_FILE   = credentials('android-keystore')            // Secret file (.jks)
+        KEYSTORE_PASS   = credentials('android-keystore-password')   // Secret text
+        KEY_ALIAS_CRED  = credentials('android-key-alias')           // Secret text
+        KEY_PASS        = credentials('android-key-password')        // Secret text
+        PLAY_JSON_KEY   = credentials('play-service-account-json')   // Secret file (cuenta de servicio de Play Console)
+    }
+
+    options {
+        timeout(time: 45, unit: 'MINUTES')
+        disableConcurrentBuilds()
+    }
+
+    stages {
+        stage('Preparar versión') {
+            steps {
+                script {
+                    env.ANDROID_VERSION_CODE = "${(env.BUILD_NUMBER as int) + (params.VERSION_CODE_OFFSET as int)}"
+                    // Con tag "v1.2.0" -> versionName 1.2.0; sin tag, 1.1-<build>
+                    env.ANDROID_VERSION_NAME = env.TAG_NAME ? env.TAG_NAME.replaceFirst('^v', '') : "1.1-${env.BUILD_NUMBER}"
+                    echo "versionCode=${env.ANDROID_VERSION_CODE} versionName=${env.ANDROID_VERSION_NAME}"
+                }
+            }
+        }
+
+        stage('Dependencias') {
+            steps {
+                sh 'npm ci --include=dev'
+                sh 'npm run build -w shared'
+            }
+        }
+
+        stage('Build web + sync Capacitor') {
+            steps {
+                dir('frontend') {
+                    sh "VITE_API_URL=${API_URL} npm run build"
+                    sh 'npx cap sync android'
+                }
+            }
+        }
+
+        stage('Compilar AAB firmado') {
+            steps {
+                dir('frontend/android') {
+                    sh '''
+                        export ANDROID_KEYSTORE_PATH="$KEYSTORE_FILE"
+                        export ANDROID_KEYSTORE_PASSWORD="$KEYSTORE_PASS"
+                        export ANDROID_KEY_ALIAS="$KEY_ALIAS_CRED"
+                        export ANDROID_KEY_PASSWORD="$KEY_PASS"
+                        chmod +x gradlew
+                        ./gradlew --no-daemon clean bundleRelease
+                    '''
+                }
+            }
+        }
+
+        stage('Archivar') {
+            steps {
+                archiveArtifacts artifacts: 'frontend/android/app/build/outputs/bundle/release/*.aab', fingerprint: true
+            }
+        }
+
+        stage('Subir a Google Play') {
+            when { expression { params.UPLOAD_TO_PLAY } }
+            steps {
+                sh '''
+                    fastlane supply \
+                      --aab frontend/android/app/build/outputs/bundle/release/app-release.aab \
+                      --package_name com.traskiloner.autotrack \
+                      --json_key "$PLAY_JSON_KEY" \
+                      --track "$PLAY_TRACK" \
+                      --skip_upload_metadata true \
+                      --skip_upload_images true \
+                      --skip_upload_screenshots true \
+                      --skip_upload_changelogs true
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
