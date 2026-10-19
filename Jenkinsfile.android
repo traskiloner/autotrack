@@ -13,7 +13,9 @@ pipeline {
     }
 
     parameters {
-        choice(name: 'PLAY_TRACK', choices: ['internal', 'alpha', 'beta', 'production'], description: 'Track de Google Play donde publicar')
+        // En la API de Google Play: 'alpha' = prueba cerrada (track por defecto), 'beta' = prueba abierta
+        choice(name: 'PLAY_TRACK', choices: ['alpha', 'internal', 'beta', 'production', 'custom'], description: 'Track de Google Play: alpha = prueba cerrada, internal = prueba interna, beta = prueba abierta, production = producción, custom = track cerrado con nombre propio (ver CUSTOM_TRACK)')
+        string(name: 'CUSTOM_TRACK', defaultValue: '', description: 'Solo si PLAY_TRACK=custom: nombre exacto del track de prueba cerrada creado en Play Console')
         booleanParam(name: 'UPLOAD_TO_PLAY', defaultValue: true, description: 'Subir el AAB a Google Play (si no, solo se compila y se archiva)')
         string(name: 'VERSION_CODE_OFFSET', defaultValue: '2', description: 'Se suma al nº de build para obtener el versionCode (debe ser siempre mayor que el último subido a Play)')
     }
@@ -86,12 +88,24 @@ pipeline {
         stage('Subir a Google Play') {
             when { expression { params.UPLOAD_TO_PLAY } }
             steps {
+                script {
+                    env.TARGET_TRACK = params.PLAY_TRACK == 'custom' ? params.CUSTOM_TRACK.trim() : params.PLAY_TRACK
+                    if (!env.TARGET_TRACK) {
+                        error('PLAY_TRACK=custom requiere rellenar CUSTOM_TRACK')
+                    }
+                    if (env.TARGET_TRACK == 'production') {
+                        // Confirmación manual antes de publicar a todos los usuarios
+                        timeout(time: 15, unit: 'MINUTES') {
+                            input message: "¿Publicar la versión ${env.ANDROID_VERSION_NAME} en PRODUCCIÓN?", ok: 'Publicar'
+                        }
+                    }
+                }
                 sh '''
                     fastlane supply \
                       --aab frontend/android/app/build/outputs/bundle/release/app-release.aab \
                       --package_name com.traskiloner.autotrack \
                       --json_key "$PLAY_JSON_KEY" \
-                      --track "$PLAY_TRACK" \
+                      --track "$TARGET_TRACK" \
                       --skip_upload_metadata true \
                       --skip_upload_images true \
                       --skip_upload_screenshots true \

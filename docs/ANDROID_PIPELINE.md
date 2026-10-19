@@ -84,7 +84,8 @@ keytool -genkeypair -v -keystore autotrack-upload.jks -alias autotrack \
 
 | Parámetro | Por defecto | Descripción |
 |---|---|---|
-| `PLAY_TRACK` | `internal` | Track de destino: `internal`, `alpha`, `beta`, `production` |
+| `PLAY_TRACK` | `alpha` | `alpha` = **prueba cerrada**, `internal` = prueba interna, `beta` = prueba abierta, `production` = producción, `custom` = track cerrado con nombre propio |
+| `CUSTOM_TRACK` | _(vacío)_ | Solo con `PLAY_TRACK=custom`: nombre exacto del track cerrado creado en Play Console |
 | `UPLOAD_TO_PLAY` | `true` | Si es `false`, solo compila y archiva el AAB |
 | `VERSION_CODE_OFFSET` | `2` | Se suma al nº de build para obtener el `versionCode` |
 
