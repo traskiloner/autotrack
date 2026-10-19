@@ -1,5 +1,5 @@
 # Imagen de build para el pipeline de Android (Jenkinsfile.android)
-# JDK 21 + Android SDK + Node 20 + fastlane (para subir a Google Play)
+# JDK 21 + Android SDK + Node 22 + fastlane (para subir a Google Play)
 FROM eclipse-temurin:21-jdk-jammy
 
 ENV ANDROID_HOME=/opt/android-sdk \
@@ -10,7 +10,7 @@ ENV PATH=$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platfo
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       curl unzip git ca-certificates build-essential ruby-full \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && gem install fastlane -N \
     && rm -rf /var/lib/apt/lists/*

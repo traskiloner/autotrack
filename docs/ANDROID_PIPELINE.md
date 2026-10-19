@@ -14,7 +14,7 @@ Preparar versión → Dependencias → Build web + cap sync → Compilar AAB fir
 | Pieza | Fichero | Función |
 |---|---|---|
 | Pipeline | `Jenkinsfile.android` | Orquesta todos los pasos |
-| Imagen de build | `frontend/android/ci/Dockerfile` | JDK 21, Android SDK 36, Node 20, fastlane |
+| Imagen de build | `frontend/android/ci/Dockerfile` | JDK 21, Android SDK 36, Node 22, fastlane |
 | Gradle | `frontend/android/app/build.gradle` | Lee versión y firma de variables de entorno |
 
 ### Variables de entorno que lee Gradle
