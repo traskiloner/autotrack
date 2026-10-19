@@ -143,6 +143,29 @@ El AAB queda en `frontend/android/app/build/outputs/bundle/release/app-release.a
 | Build muy lento | Comprueba que el volumen `gradle-cache` se monta (`args` del agente) |
 | Fallo de SDK/licencias | Actualiza versiones de plataforma/build-tools en `frontend/android/ci/Dockerfile` (deben coincidir con `compileSdkVersion` de `variables.gradle`) |
 
+## 11 bis. Nodo de Jenkins con CPU ARM (aarch64)
+
+Síntoma en el log de Gradle:
+
+```
+aapt2: 1: Syntax error: ")" unexpected
+AAPT2 ... Daemon startup failed
+```
+
+Causa: Google solo publica `aapt2` (herramienta de build de Android) para Linux **x86_64**. En un servidor ARM (Raspberry Pi, Oracle Ampere, etc.) el binario no se puede ejecutar.
+Comprueba la arquitectura del servidor con `uname -m` (`aarch64` = ARM).
+
+Solución aplicada en `Jenkinsfile.android`: se fuerza `--platform linux/amd64` en el build de la imagen y en el contenedor. En ARM esto requiere emulación **qemu** en el host (una sola vez):
+
+```bash
+docker run --privileged --rm tonistiigi/binfmt --install amd64
+```
+
+Notas:
+- La compilación emulada es bastante más lenta (puede tardar 10-20 min o más).
+- Si en un servidor x86_64, la bandera es inocua.
+- Alternativa más rápida: ejecutar el job en un agente de Jenkins x86_64.
+
 ## 12. Mantenimiento
 
 - Al subir `compileSdkVersion` en `frontend/android/variables.gradle`, actualiza `platforms;android-XX` y `build-tools` en el Dockerfile de CI.

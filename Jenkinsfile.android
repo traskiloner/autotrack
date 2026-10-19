@@ -7,10 +7,13 @@ pipeline {
         dockerfile {
             filename 'frontend/android/ci/Dockerfile'
             dir '.'
+            // aapt2 (Android build-tools) solo existe para Linux x86_64. Si el nodo de Jenkins es ARM (aarch64),
+            // se fuerza amd64 y se ejecuta emulado con qemu (ver docs/ANDROID_PIPELINE.md, sección de troubleshooting).
+            additionalBuildArgs '--platform linux/amd64'
             // Cache de Gradle entre builds para acelerar la compilación
             // Root dentro del contenedor: Jenkins lo lanza por defecto con el UID del usuario jenkins (114:124),
             // que no puede escribir en el SDK de Android ni en ~/.gradle. Al final se devuelven los permisos del workspace.
-            args '-u root:root -v gradle-cache:/root/.gradle'
+            args '--platform linux/amd64 -u root:root -v gradle-cache:/root/.gradle'
         }
     }
 
