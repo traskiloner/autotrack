@@ -8,7 +8,9 @@ pipeline {
             filename 'frontend/android/ci/Dockerfile'
             dir '.'
             // Cache de Gradle entre builds para acelerar la compilación
-            args '-v gradle-cache:/root/.gradle'
+            // Root dentro del contenedor: Jenkins lo lanza por defecto con el UID del usuario jenkins (114:124),
+            // que no puede escribir en el SDK de Android ni en ~/.gradle. Al final se devuelven los permisos del workspace.
+            args '-u root:root -v gradle-cache:/root/.gradle'
         }
     }
 
@@ -117,7 +119,20 @@ pipeline {
 
     post {
         always {
-            cleanWs()
+            script {
+                // Los ficheros creados como root deben volver a ser del usuario jenkins para poder limpiarlos
+                try {
+                    sh 'chown -R $(stat -c %u:%g .) . || true'
+                } catch (err) {
+                    echo "No se pudo ajustar permisos del workspace: ${err}"
+                }
+                // cleanWs necesita contexto de nodo; si el build falló antes de asignarlo no debe ocultar el error real
+                try {
+                    cleanWs()
+                } catch (err) {
+                    echo "cleanWs omitido: ${err}"
+                }
+            }
         }
     }
 }
