@@ -16,8 +16,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && gem install fastlane -N \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Soporte multi-arch: librerías x86_64 para que qemu-x86_64 pueda ejecutar aapt2 sin fallar por linker dinámico
+# 2. Soporte multi-arch: configurar repositorios para separar ports.ubuntu.com (arm64) de archive.ubuntu.com (amd64)
+# En Ubuntu, ports.ubuntu.com solo tiene arm64 y archive.ubuntu.com tiene amd64; si no se configuran por separado con [arch=...], da 404.
 RUN dpkg --add-architecture amd64 \
+    && sed -i 's/^deb /deb [arch=arm64] /' /etc/apt/sources.list \
+    && cp /etc/apt/sources.list /etc/apt/sources.list.d/amd64.list \
+    && sed -i 's/arch=arm64/arch=amd64/' /etc/apt/sources.list.d/amd64.list \
+    && sed -i 's|ports.ubuntu.com/ubuntu-ports|archive.ubuntu.com/ubuntu|' /etc/apt/sources.list.d/amd64.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends libc6:amd64 libstdc++6:amd64 zlib1g:amd64 \
     && rm -rf /var/lib/apt/lists/*
