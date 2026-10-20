@@ -1,5 +1,5 @@
-# Imagen de build para el pipeline de Android (Jenkinsfile.android)
-# JDK 21 + Android SDK + Node 22 + fastlane (para subir a Google Play)
+# Imagen de build nativa (ARM64 en Raspberry Pi, o amd64 en PC/Cloud)
+# JDK 21 + Android SDK + Node 22 + fastlane
 FROM eclipse-temurin:21-jdk-jammy
 
 ENV ANDROID_HOME=/opt/android-sdk \
@@ -8,8 +8,9 @@ ENV ANDROID_HOME=/opt/android-sdk \
     LANG=C.UTF-8
 ENV PATH=$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools
 
+# Instalamos herramientas nativas + qemu-user-static (para permitir ejecutar binarios x86_64 como aapt2 de forma transparente)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      curl unzip git ca-certificates build-essential ruby-full \
+      curl unzip git ca-certificates build-essential ruby-full qemu-user-static binfmt-support \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && gem install fastlane -N \
