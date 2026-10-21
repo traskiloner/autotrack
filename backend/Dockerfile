@@ -23,6 +23,9 @@ RUN npx prisma generate --schema=backend/prisma/schema.prisma
 # Build backend
 RUN npm run build -w backend
 
+# Run automated tests to validate build
+RUN npm test -w backend
+
 EXPOSE 5001
 
 WORKDIR /app/backend
