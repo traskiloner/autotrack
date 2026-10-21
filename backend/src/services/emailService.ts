@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { logger } from '../logger';
 
 const host = process.env.SMTP_HOST;
 const port = Number(process.env.SMTP_PORT || 587);
@@ -20,19 +21,24 @@ if (!isMock) {
       pass,
     },
   });
-  console.log(`[EMAIL SERVICE] Configured to use SMTP: ${host}:${port} (${user})`);
+  logger.info(`[EMAIL SERVICE] Configured to use SMTP: ${host}:${port} (${user})`);
 } else {
-  console.log('[EMAIL SERVICE] SMTP not configured. Running in MOCK MODE (logging to console)');
+  logger.info('[EMAIL SERVICE] SMTP not configured. Running in MOCK MODE (logging to console)');
+}
+
+export function escapeHtml(str: string): string {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 async function sendMail(to: string, subject: string, html: string) {
   if (isMock || !transporter) {
-    console.log('\n======================================================');
-    console.log(`[EMAIL MOCK] Sending email:`);
-    console.log(`To:      ${to}`);
-    console.log(`Subject: ${subject}`);
-    console.log(`Content:\n${html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300)}...`);
-    console.log('======================================================\n');
+    logger.info({ to, subject }, '[EMAIL MOCK] Email simulated');
     return;
   }
 
@@ -44,7 +50,7 @@ async function sendMail(to: string, subject: string, html: string) {
       html,
     });
   } catch (err) {
-    console.error(`[EMAIL SERVICE] Error sending email to ${to}:`, err);
+    logger.error({ err, to }, `[EMAIL SERVICE] Error sending email`);
   }
 }
 
@@ -110,7 +116,7 @@ const baseTemplate = (title: string, content: string) => `
 <body>
   <div class="container">
     <div class="header">
-      <h1>${title}</h1>
+      <h1>${escapeHtml(title)}</h1>
     </div>
     <div class="content">
       ${content}
@@ -126,7 +132,7 @@ const baseTemplate = (title: string, content: string) => `
 export async function sendWelcomeEmail(email: string, username: string) {
   const title = '¡Bienvenido a AutoTrack!';
   const content = `
-    <p>Hola <strong>${username}</strong>,</p>
+    <p>Hola <strong>${escapeHtml(username)}</strong>,</p>
     <p>Gracias por registrarte en <strong>AutoTrack</strong>, la plataforma premium de seguimiento de mantenimiento para tus vehículos.</p>
     <p>A partir de ahora podrás:</p>
     <ul>
@@ -143,10 +149,10 @@ export async function sendWelcomeEmail(email: string, username: string) {
 export async function sendCarSharedEmail(email: string, username: string, ownerName: string, carDetails: string) {
   const title = 'Vehículo Compartido Contigo';
   const content = `
-    <p>Hola <strong>${username}</strong>,</p>
-    <p>El usuario <strong>${ownerName}</strong> ha compartido contigo el acceso a su vehículo:</p>
+    <p>Hola <strong>${escapeHtml(username)}</strong>,</p>
+    <p>El usuario <strong>${escapeHtml(ownerName)}</strong> ha compartido contigo el acceso a su vehículo:</p>
     <div class="highlight-box">
-      <strong>Vehículo:</strong> ${carDetails}
+      <strong>Vehículo:</strong> ${escapeHtml(carDetails)}
     </div>
     <p>Ahora puedes ver e introducir registros de repostaje, alertas y mantenimientos para este coche desde tu panel de AutoTrack.</p>
   `;
@@ -156,10 +162,10 @@ export async function sendCarSharedEmail(email: string, username: string, ownerN
 export async function sendCarUnsharedEmail(email: string, username: string, ownerName: string, carDetails: string) {
   const title = 'Acceso a Vehículo Revocado';
   const content = `
-    <p>Hola <strong>${username}</strong>,</p>
-    <p>El usuario <strong>${ownerName}</strong> ha dejado de compartir contigo el acceso a su vehículo:</p>
+    <p>Hola <strong>${escapeHtml(username)}</strong>,</p>
+    <p>El usuario <strong>${escapeHtml(ownerName)}</strong> ha dejado de compartir contigo el acceso a su vehículo:</p>
     <div class="highlight-box">
-      <strong>Vehículo:</strong> ${carDetails}
+      <strong>Vehículo:</strong> ${escapeHtml(carDetails)}
     </div>
     <p>Ya no dispondrás de acceso a las alertas, consumos ni mantenimientos de este coche.</p>
   `;
@@ -169,11 +175,11 @@ export async function sendCarUnsharedEmail(email: string, username: string, owne
 export async function sendNewAlertEmail(email: string, username: string, carDetails: string, alertDetails: string) {
   const title = 'Nueva Alerta de Mantenimiento';
   const content = `
-    <p>Hola <strong>${username}</strong>,</p>
+    <p>Hola <strong>${escapeHtml(username)}</strong>,</p>
     <p>Se ha registrado un nuevo aviso/recordatorio para tu vehículo:</p>
     <div class="highlight-box">
-      <strong>Vehículo:</strong> ${carDetails}<br/>
-      <strong>Alerta:</strong> ${alertDetails}
+      <strong>Vehículo:</strong> ${escapeHtml(carDetails)}<br/>
+      <strong>Alerta:</strong> ${escapeHtml(alertDetails)}
     </div>
     <p>Recibirás recordatorios automáticos de AutoTrack conforme se acerque el objetivo establecido.</p>
   `;
@@ -183,11 +189,11 @@ export async function sendNewAlertEmail(email: string, username: string, carDeta
 export async function sendTestEmail(email: string, username: string) {
   const title = 'Correo de Prueba de AutoTrack';
   const content = `
-    <p>Hola <strong>${username}</strong>,</p>
+    <p>Hola <strong>${escapeHtml(username)}</strong>,</p>
     <p>Este es un correo electrónico de prueba enviado desde tu aplicación <strong>AutoTrack</strong> para verificar la configuración de tu servidor de correos (SMTP).</p>
     <p>Si estás leyendo esto, significa que tu servidor de correo está configurado correctamente y listo para enviar notificaciones reales.</p>
     <div class="highlight-box">
-      <strong>Servidor SMTP:</strong> ${host || 'Modo Simulado (Logs)'}<br/>
+      <strong>Servidor SMTP:</strong> ${escapeHtml(host || 'Modo Simulado (Logs)')}<br/>
       <strong>Puerto:</strong> ${port}<br/>
       <strong>Conexión segura:</strong> ${port === 465 ? 'SSL (Directo)' : 'STARTTLS / No seguro'}
     </div>

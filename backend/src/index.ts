@@ -1,18 +1,76 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import path from 'path';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
-import { initDb } from './db';
-import { register, login, updateProfile, sendTestEmailHandler, refresh, deleteAccount } from './controllers/authController';
-import { getCars, getCarById, createCar, updateCar, deleteCar, getCarShares, shareCar, unshareCar } from './controllers/carController';
-import { getMaintenances, createMaintenance, deleteMaintenance, getAllMaintenances, updateMaintenance } from './controllers/maintenanceController';
-import { getInventory, createInventoryPart, updateInventoryPart, deleteInventoryPart } from './controllers/inventoryController';
-import { getUserAlerts, getCarAlerts, createAlert, completeAlert, deleteAlert } from './controllers/alertController';
-import { upload, handleUpload } from './controllers/uploadController';
-import { getCarFuelLogs, createFuelLog, updateFuelLog, deleteFuelLog } from './controllers/fuelController';
+import { ZodError } from 'zod';
+import { initDb, pool, prisma } from './db';
+import { config } from './config';
+import { logger } from './logger';
+import { HttpError } from './lib/http';
+import {
+  registerSchema,
+  loginSchema,
+  refreshSchema,
+  updateProfileSchema,
+  carSchema,
+  carUpdateSchema,
+  shareCarSchema,
+  maintenanceSchema,
+  inventoryPartSchema,
+  inventoryPartUpdateSchema,
+  alertSchema,
+  fuelLogSchema,
+  adminCreateUserSchema,
+  adminUpdateUserSchema,
+  transferCarSchema,
+} from '@autotrack/shared';
+import { validateBody } from './middlewares/validate';
+import {
+  register,
+  login,
+  updateProfile,
+  sendTestEmailHandler,
+  refresh,
+  deleteAccount,
+} from './controllers/authController';
+import {
+  getCars,
+  getCarById,
+  createCar,
+  updateCar,
+  deleteCar,
+  getCarShares,
+  shareCar,
+  unshareCar,
+} from './controllers/carController';
+import {
+  getMaintenances,
+  createMaintenance,
+  deleteMaintenance,
+  getAllMaintenances,
+  updateMaintenance,
+} from './controllers/maintenanceController';
+import {
+  getInventory,
+  createInventoryPart,
+  updateInventoryPart,
+  deleteInventoryPart,
+} from './controllers/inventoryController';
+import {
+  getUserAlerts,
+  getCarAlerts,
+  createAlert,
+  completeAlert,
+  deleteAlert,
+} from './controllers/alertController';
+import { upload, handleUpload, serveUploadedFile } from './controllers/uploadController';
+import {
+  getCarFuelLogs,
+  createFuelLog,
+  updateFuelLog,
+  deleteFuelLog,
+} from './controllers/fuelController';
 import { authMiddleware, adminMiddleware } from './middlewares/auth';
 import {
   checkAdminSetup,
@@ -23,131 +81,200 @@ import {
   adminUpdateUser,
   adminDeleteUser,
   getAllCars,
-  adminTransferCarOwner
+  adminTransferCarOwner,
 } from './controllers/adminController';
 
-dotenv.config();
-
-// Production security enforcement
-if (process.env.NODE_ENV === 'production') {
-  if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'super_secret_key_change_me_123') {
-    console.error('[CRITICAL] JWT_SECRET must be configured with a secure value in production.');
-    process.exit(1);
-  }
-}
-
 const app = express();
-const PORT = process.env.PORT || 5001;
+const PORT = config.port;
 
-// Trust first proxy hop (e.g. Nginx, Portainer, etc.)
-app.set('trust proxy', 1);
+// Trust reverse proxy hops (Nginx, Portainer, Docker network)
+app.set('trust proxy', config.trustProxy);
 
-// Apply Helmet headers for security
-app.use(helmet());
+// Security headers with Helmet
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 
-// Restrict CORS origins in production
-app.use(cors({
-  origin: ['https://autotrack.traskiloner.com', 'http://localhost:4080', 'http://localhost', 'capacitor://localhost'],
-  credentials: true,
-}));
+// CORS configuration
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
+      if (!origin) return callback(null, true);
+      if (
+        config.corsOrigins.includes(origin) ||
+        origin.startsWith('http://localhost:') ||
+        origin.startsWith('https://localhost:') ||
+        origin === 'capacitor://localhost'
+      ) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS no permitido para el origen: ${origin}`));
+    },
+    credentials: true,
+  })
+);
 
-app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Body parser with size limits
+app.use(express.json({ limit: '2mb' }));
 
-// Configure rate limiting for authentication endpoints
+// Rate limiters
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // limit each IP to 20 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 20,
   message: { message: 'Demasiadas peticiones desde esta IP. Por favor, inténtelo de nuevo en 15 minutos.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// Auth Routes (Rate Limited)
-app.post('/api/auth/register', authLimiter, register);
-app.post('/api/auth/login', authLimiter, login);
-app.post('/api/auth/refresh', refresh);
-app.put('/api/users/profile', authMiddleware, updateProfile);
+const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { message: 'Demasiadas peticiones de refresco de token.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: { message: 'Demasiadas subidas de archivos desde esta IP.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Secure document viewing endpoint with authentication check
+app.get('/uploads/:filename', serveUploadedFile);
+
+// Health check endpoint with database probe
+app.get('/health', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'ok', timestamp: new Date() });
+  } catch (err: any) {
+    logger.error({ err }, 'Health check failed: database unreachable');
+    res.status(503).json({ status: 'error', message: 'Database unreachable', timestamp: new Date() });
+  }
+});
+
+// Auth Routes
+app.post('/api/auth/register', authLimiter, validateBody(registerSchema), register);
+app.post('/api/auth/login', authLimiter, validateBody(loginSchema), login);
+app.post('/api/auth/refresh', refreshLimiter, validateBody(refreshSchema), refresh);
+app.put('/api/users/profile', authMiddleware, validateBody(updateProfileSchema), updateProfile);
 app.delete('/api/users/profile', authMiddleware, deleteAccount);
 app.post('/api/users/test-email', authLimiter, authMiddleware, adminMiddleware, sendTestEmailHandler);
 
-
 // Admin Routes
 app.get('/api/admin/setup-check', checkAdminSetup);
-app.post('/api/admin/setup', setupInitialAdmin);
+app.post('/api/admin/setup', authLimiter, setupInitialAdmin);
 app.get('/api/admin/stats', authMiddleware, adminMiddleware, getGlobalStats);
 app.get('/api/admin/users', authMiddleware, adminMiddleware, getAllUsers);
-app.post('/api/admin/users', authMiddleware, adminMiddleware, adminCreateUser);
-app.put('/api/admin/users/:id', authMiddleware, adminMiddleware, adminUpdateUser);
+app.post('/api/admin/users', authMiddleware, adminMiddleware, validateBody(adminCreateUserSchema), adminCreateUser);
+app.put('/api/admin/users/:id', authMiddleware, adminMiddleware, validateBody(adminUpdateUserSchema), adminUpdateUser);
 app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, adminDeleteUser);
 app.get('/api/admin/cars', authMiddleware, adminMiddleware, getAllCars);
-app.put('/api/admin/cars/:id/transfer', authMiddleware, adminMiddleware, adminTransferCarOwner);
+app.put('/api/admin/cars/:id/transfer', authMiddleware, adminMiddleware, validateBody(transferCarSchema), adminTransferCarOwner);
 
-// Car Routes (Protected)
+// Car Routes
 app.get('/api/cars', authMiddleware, getCars);
 app.get('/api/cars/:id', authMiddleware, getCarById);
-app.post('/api/cars', authMiddleware, createCar);
-app.put('/api/cars/:id', authMiddleware, updateCar);
+app.post('/api/cars', authMiddleware, validateBody(carSchema), createCar);
+app.put('/api/cars/:id', authMiddleware, validateBody(carUpdateSchema), updateCar);
 app.delete('/api/cars/:id', authMiddleware, deleteCar);
 app.get('/api/cars/:carId/shares', authMiddleware, getCarShares);
-app.post('/api/cars/:carId/share', authMiddleware, shareCar);
+app.post('/api/cars/:carId/share', authMiddleware, validateBody(shareCarSchema), shareCar);
 app.delete('/api/cars/:carId/share/:userId', authMiddleware, unshareCar);
 
-// Maintenance Routes (Protected)
+// Maintenance Routes
 app.get('/api/maintenances', authMiddleware, getAllMaintenances);
 app.get('/api/cars/:carId/maintenance', authMiddleware, getMaintenances);
-app.post('/api/cars/:carId/maintenance', authMiddleware, createMaintenance);
+app.post('/api/cars/:carId/maintenance', authMiddleware, validateBody(maintenanceSchema), createMaintenance);
+app.put('/api/maintenance/:id', authMiddleware, validateBody(maintenanceSchema), updateMaintenance);
 app.delete('/api/maintenance/:id', authMiddleware, deleteMaintenance);
-app.put('/api/maintenance/:id', authMiddleware, updateMaintenance);
 
-// Inventory Routes (Protected)
+// Inventory Routes
 app.get('/api/inventory', authMiddleware, getInventory);
-app.post('/api/inventory', authMiddleware, createInventoryPart);
-app.put('/api/inventory/:id', authMiddleware, updateInventoryPart);
+app.post('/api/inventory', authMiddleware, validateBody(inventoryPartSchema), createInventoryPart);
+app.put('/api/inventory/:id', authMiddleware, validateBody(inventoryPartUpdateSchema), updateInventoryPart);
 app.delete('/api/inventory/:id', authMiddleware, deleteInventoryPart);
 
-// Alert Routes (Protected)
+// Alert Routes
 app.get('/api/alerts', authMiddleware, getUserAlerts);
 app.get('/api/cars/:carId/alerts', authMiddleware, getCarAlerts);
-app.post('/api/cars/:carId/alerts', authMiddleware, createAlert);
+app.post('/api/cars/:carId/alerts', authMiddleware, validateBody(alertSchema), createAlert);
 app.put('/api/alerts/:id/complete', authMiddleware, completeAlert);
 app.delete('/api/alerts/:id', authMiddleware, deleteAlert);
 
-// Fuel Routes (Protected)
+// Fuel Routes
 app.get('/api/cars/:carId/fuel', authMiddleware, getCarFuelLogs);
-app.post('/api/cars/:carId/fuel', authMiddleware, createFuelLog);
-app.put('/api/fuel/:id', authMiddleware, updateFuelLog);
+app.post('/api/cars/:carId/fuel', authMiddleware, validateBody(fuelLogSchema), createFuelLog);
+app.put('/api/fuel/:id', authMiddleware, validateBody(fuelLogSchema), updateFuelLog);
 app.delete('/api/fuel/:id', authMiddleware, deleteFuelLog);
 
-// Upload Route (Protected)
-app.post('/api/upload', authMiddleware, upload.single('file'), handleUpload);
+// Upload Route
+app.post('/api/upload', authMiddleware, uploadLimiter, upload.single('file'), handleUpload);
 
+// Error handling middleware
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  if (err instanceof HttpError) {
+    return res.status(err.status).json({ message: err.message });
+  }
 
-// Error handling middleware for Multer and general errors
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err instanceof ZodError) {
+    const message = err.issues.map((i) => i.message).join('. ');
+    return res.status(400).json({ message, details: err.issues });
+  }
+
   if (err instanceof multer.MulterError || err.message === 'Solo se permiten imágenes (JPEG/PNG) y documentos PDF.') {
     return res.status(400).json({ message: err.message });
   }
-  console.error('Unhandled server error:', err);
+
+  logger.error({ err, path: req.path, method: req.method }, 'Unhandled server error');
   res.status(500).json({ message: 'Error interno del servidor' });
 });
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date() });
-});
+let server: any = null;
 
-// Start server after DB init
 async function startServer() {
   try {
     await initDb();
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+    server = app.listen(PORT, () => {
+      logger.info(`Server running on port ${PORT} in ${config.nodeEnv} mode`);
     });
   } catch (err) {
-    console.error('Failed to start server:', err);
+    logger.error({ err }, 'Failed to start server');
     process.exit(1);
   }
 }
 
-startServer();
+// Graceful shutdown handling
+const handleShutdown = async (signal: string) => {
+  logger.info(`Received ${signal}. Shutting down gracefully...`);
+  if (server) {
+    server.close(async () => {
+      logger.info('HTTP server closed.');
+      try {
+        await prisma.$disconnect();
+        await pool.end();
+        logger.info('Database pool closed.');
+      } catch (err) {
+        logger.error({ err }, 'Error closing database connections');
+      }
+      process.exit(0);
+    });
+  } else {
+    process.exit(0);
+  }
+};
+
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}
+
+export { app };

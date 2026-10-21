@@ -1,8 +1,11 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import { Role } from '@autotrack/shared';
 import prisma from '../db';
 import { AuthenticatedRequest } from '../middlewares/auth';
+import { issueTokens } from './authController';
+import { logger } from '../logger';
+import { deleteUploadedFile } from './uploadController';
 
 // 1. Check if admin setup is required (no admin user exists)
 export async function checkAdminSetup(req: Request, res: Response) {
@@ -15,7 +18,7 @@ export async function checkAdminSetup(req: Request, res: Response) {
 
     res.json({ setupRequired: !adminUser });
   } catch (err) {
-    console.error('Error checking admin setup status:', err);
+    logger.error({ err }, 'Error checking admin setup status');
     res.status(500).json({ message: 'Error al comprobar el estado del administrador' });
   }
 }
@@ -44,8 +47,8 @@ export async function setupInitialAdmin(req: Request, res: Response) {
     const userCheck = await prisma.user.findFirst({
       where: {
         OR: [
-          { username },
-          { email }
+          { username: { equals: username, mode: 'insensitive' } },
+          { email: { equals: email, mode: 'insensitive' } },
         ]
       }
     });
@@ -64,35 +67,31 @@ export async function setupInitialAdmin(req: Request, res: Response) {
         username,
         email,
         password_hash: passwordHash,
-        role: 'admin'
+        role: 'admin' as Role,
       },
       select: {
         id: true,
         username: true,
         email: true,
         role: true,
-        created_at: true
+        created_at: true,
+        token_version: true,
       }
     });
 
-    // Generate JWT
-    const secret = process.env.JWT_SECRET || 'super_secret_key_change_me_123';
-    const token = jwt.sign({ id: admin.id, username: admin.username, role: admin.role }, secret, {
-      expiresIn: '1h',
-    });
-
-    const refreshSecret = process.env.JWT_REFRESH_SECRET || (secret + '_refresh');
-    const refreshToken = jwt.sign({ id: admin.id, username: admin.username, role: admin.role, type: 'refresh' }, refreshSecret, {
-      expiresIn: '30d',
-    });
+    const tokens = await issueTokens(admin);
 
     res.status(201).json({
-      token,
-      refreshToken,
-      user: admin
+      ...tokens,
+      user: {
+        id: admin.id,
+        username: admin.username,
+        email: admin.email,
+        role: admin.role,
+      }
     });
   } catch (err) {
-    console.error('Error setting up initial admin:', err);
+    logger.error({ err }, 'Error setting up initial admin');
     res.status(500).json({ message: 'Error interno del servidor al crear administrador' });
   }
 }
@@ -262,9 +261,17 @@ export async function adminUpdateUser(req: AuthenticatedRequest, res: Response) 
       is_active: is_active !== undefined ? Boolean(is_active) : undefined
     };
 
+    let shouldRevokeTokens = false;
     if (password && password.trim() !== '') {
       const salt = await bcrypt.genSalt(10);
       updateData.password_hash = await bcrypt.hash(password, salt);
+      updateData.token_version = { increment: 1 };
+      shouldRevokeTokens = true;
+    }
+
+    if (is_active === false) {
+      updateData.token_version = { increment: 1 };
+      shouldRevokeTokens = true;
     }
 
     const updatedUser = await prisma.user.update({
@@ -283,9 +290,15 @@ export async function adminUpdateUser(req: AuthenticatedRequest, res: Response) 
       }
     });
 
+    if (shouldRevokeTokens) {
+      await prisma.refreshToken.deleteMany({
+        where: { user_id: Number(id) }
+      });
+    }
+
     res.json(updatedUser);
   } catch (err) {
-    console.error('Error updating user from admin panel:', err);
+    logger.error({ err }, 'Error updating user from admin panel');
     res.status(500).json({ message: 'Error al actualizar el usuario' });
   }
 }
@@ -307,13 +320,26 @@ export async function adminDeleteUser(req: AuthenticatedRequest, res: Response) 
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
 
+    // Find and delete any uploaded document files belonging to this user's cars
+    const userDocs = await prisma.maintenance.findMany({
+      where: {
+        car: { user_id: Number(id) },
+        document_path: { not: null }
+      },
+      select: { document_path: true }
+    });
+
+    for (const doc of userDocs) {
+      deleteUploadedFile(doc.document_path);
+    }
+
     await prisma.user.delete({
       where: { id: Number(id) }
     });
 
     res.status(204).send();
   } catch (err) {
-    console.error('Error deleting user from admin panel:', err);
+    logger.error({ err }, 'Error deleting user from admin panel');
     res.status(500).json({ message: 'Error al eliminar el usuario' });
   }
 }

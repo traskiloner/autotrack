@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../db';
+import { logger } from '../logger';
 
 export async function getInventory(req: AuthenticatedRequest, res: Response) {
   const userId = req.user?.id;
@@ -16,7 +17,7 @@ export async function getInventory(req: AuthenticatedRequest, res: Response) {
     });
     res.json(parts);
   } catch (err) {
-    console.error('Error fetching inventory:', err);
+    logger.error({ err }, 'Error fetching inventory');
     res.status(500).json({ message: 'Error al obtener el inventario' });
   }
 }
@@ -32,7 +33,7 @@ export async function createInventoryPart(req: AuthenticatedRequest, res: Respon
   try {
     const part = await prisma.inventoryPart.create({
       data: {
-        user_id: userId,
+        user_id: userId!,
         name,
         brand: brand || null,
         part_number: partNumber || null,
@@ -43,7 +44,7 @@ export async function createInventoryPart(req: AuthenticatedRequest, res: Respon
     });
     res.status(201).json(part);
   } catch (err) {
-    console.error('Error creating inventory part:', err);
+    logger.error({ err }, 'Error creating inventory part');
     res.status(500).json({ message: 'Error al registrar la pieza en el inventario' });
   }
 }
@@ -54,7 +55,6 @@ export async function updateInventoryPart(req: AuthenticatedRequest, res: Respon
   const { name, brand, partNumber, price, stock, purchaseUrl } = req.body;
 
   try {
-    // Check ownership
     const checkOwnership = await prisma.inventoryPart.findFirst({
       where: {
         id: Number(partId),
@@ -76,13 +76,13 @@ export async function updateInventoryPart(req: AuthenticatedRequest, res: Respon
         part_number: partNumber !== undefined ? partNumber : undefined,
         price: price !== undefined ? Number(price) : undefined,
         stock: stock !== undefined ? Number(stock) : undefined,
-        purchase_url: purchaseUrl !== undefined ? (purchaseUrl || null) : undefined,
+        purchase_url: purchaseUrl !== undefined ? purchaseUrl || null : undefined,
       },
     });
 
     res.json(updated);
   } catch (err) {
-    console.error('Error updating inventory part:', err);
+    logger.error({ err }, 'Error updating inventory part');
     res.status(500).json({ message: 'Error al actualizar la pieza del inventario' });
   }
 }
@@ -111,7 +111,7 @@ export async function deleteInventoryPart(req: AuthenticatedRequest, res: Respon
 
     res.json({ message: 'Pieza eliminada correctamente del inventario' });
   } catch (err) {
-    console.error('Error deleting inventory part:', err);
+    logger.error({ err }, 'Error deleting inventory part');
     res.status(500).json({ message: 'Error al eliminar la pieza' });
   }
 }

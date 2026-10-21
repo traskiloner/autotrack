@@ -1,3 +1,10 @@
+export * from './schemas';
+
+export type Role = 'user' | 'admin';
+
+/** Access level of the current user over a car. */
+export type CarAccess = 'owner' | 'editor' | 'viewer';
+
 export interface Part {
   id: number;
   part_name: string;
@@ -5,6 +12,7 @@ export interface Part {
   part_number: string;
   quantity: number;
   price: number;
+  inventory_part_id?: number | null;
 }
 
 export interface Maintenance {
@@ -16,8 +24,8 @@ export interface Maintenance {
   date: string;
   parts: Part[];
   category?: string;
-  document_path?: string;
-  checklist?: string[] | string;
+  document_path?: string | null;
+  checklist?: string[];
 }
 
 export interface CarData {
@@ -38,6 +46,15 @@ export interface CarData {
     username: string;
     email: string;
   } | null;
+  /** Present on GET /api/cars and GET /api/cars/:id */
+  access?: CarAccess;
+}
+
+export interface CarShareUser {
+  id: number;
+  username: string;
+  email: string;
+  can_edit: boolean;
 }
 
 export interface Alert {
@@ -101,7 +118,13 @@ export interface User {
   id: number;
   username: string;
   email: string;
-  role?: string;
+  role?: Role;
+}
+
+export interface AuthResponse {
+  token: string;
+  refreshToken: string;
+  user: User;
 }
 
 

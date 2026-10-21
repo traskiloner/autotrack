@@ -989,7 +989,9 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                               }}
                               onClick={() => {
                                 const baseUrl = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.port === '5173' ? 'http://localhost:5001' : '');
-                                setPreviewDocUrl(`${baseUrl}${maint.document_path}`);
+                                const currentToken = localStorage.getItem('token') || '';
+                                const tokenQuery = currentToken ? `?token=${encodeURIComponent(currentToken)}` : '';
+                                setPreviewDocUrl(`${baseUrl}${maint.document_path}${tokenQuery}`);
                               }}
                             >
                               📄 Ver Documento

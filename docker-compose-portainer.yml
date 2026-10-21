@@ -25,19 +25,22 @@ services:
     container_name: autotrack_backend
     restart: always
     environment:
+      - NODE_ENV=production
       - PORT=5001
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgres_pass}
       - DB_HOST=db
       - DB_PORT=5432
       - DB_NAME=${DB_NAME:-autotrack}
-      - JWT_SECRET=${JWT_SECRET:-super_secret_key_change_me_123}
+      - JWT_SECRET=${JWT_SECRET:-}
       - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres_pass}@db:5432/${DB_NAME:-autotrack}?schema=public
       - SMTP_HOST=${SMTP_HOST:-}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASS=${SMTP_PASS:-}
       - SMTP_FROM=${SMTP_FROM:-}
+    volumes:
+      - uploads_data:/app/backend/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -70,6 +73,7 @@ services:
 
 volumes:
   postgres_data:
+  uploads_data:
 
 networks:
   autotrack_network:

@@ -1,8 +1,12 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import jwt from 'jsonwebtoken';
+import { secrets } from '../config';
+import { logger } from '../logger';
+import prisma from '../db';
 
 // Ensure upload directory exists
 const uploadDir = path.join(__dirname, '../../uploads');
@@ -15,7 +19,7 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     cb(null, uniqueSuffix + path.extname(file.originalname));
   },
 });
@@ -59,7 +63,7 @@ export function deleteUploadedFile(storedPath?: string | null) {
   if (!target.startsWith(path.resolve(uploadDir) + path.sep)) return;
   fs.unlink(target, (err) => {
     if (err && err.code !== 'ENOENT') {
-      console.error('Error deleting uploaded file:', err);
+      logger.error({ err }, 'Error deleting uploaded file');
     }
   });
 }
@@ -80,4 +84,74 @@ export function handleUpload(req: AuthenticatedRequest, res: Response) {
     filePath: relativePath,
     filename: req.file.originalname,
   });
+}
+
+/**
+ * Secure file serving endpoint with authentication and car access authorization.
+ * Supports Bearer token or ?token= query parameter for <img>, <iframe>, and new tab downloads.
+ */
+export async function serveUploadedFile(req: Request, res: Response) {
+  const rawFilename = req.params.filename;
+  if (!rawFilename) {
+    return res.status(400).json({ message: 'Nombre de archivo requerido' });
+  }
+
+  const filename = path.basename(rawFilename);
+  const targetPath = path.resolve(uploadDir, filename);
+
+  if (!targetPath.startsWith(path.resolve(uploadDir) + path.sep)) {
+    return res.status(400).json({ message: 'Ruta no válida' });
+  }
+
+  let token = '';
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (typeof req.query.token === 'string') {
+    token = req.query.token;
+  }
+
+  if (!token) {
+    return res.status(401).json({ message: 'Se requiere autenticación para acceder a este archivo' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, secrets.jwt) as { id: number; role?: string };
+
+    if (!fs.existsSync(targetPath)) {
+      return res.status(404).json({ message: 'Archivo no encontrado' });
+    }
+
+    if (decoded.role === 'admin') {
+      return res.sendFile(targetPath);
+    }
+
+    const relativePath = `/uploads/${filename}`;
+    const maintenance = await prisma.maintenance.findFirst({
+      where: {
+        document_path: relativePath,
+        car: {
+          OR: [
+            { user_id: decoded.id },
+            { shares: { some: { user_id: decoded.id } } },
+          ],
+        },
+      },
+      select: { id: true },
+    });
+
+    if (maintenance) {
+      return res.sendFile(targetPath);
+    }
+
+    // Allow recent upload by authenticated user (within 2 hours) before form submission
+    const timestampPart = parseInt(filename.split('-')[0], 10);
+    if (!isNaN(timestampPart) && Date.now() - timestampPart < 2 * 60 * 60 * 1000) {
+      return res.sendFile(targetPath);
+    }
+
+    return res.status(403).json({ message: 'No tienes permiso para ver este archivo' });
+  } catch {
+    return res.status(401).json({ message: 'Token de acceso no válido' });
+  }
 }

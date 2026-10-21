@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../db';
 import { deleteUploadedFile } from './uploadController';
+import { logger } from '../logger';
 
 interface PartInput {
   partName: string;
@@ -12,19 +13,32 @@ interface PartInput {
   inventoryPartId?: number;
 }
 
+function normalizeChecklist(input: any): string[] {
+  if (!input) return [];
+  if (Array.isArray(input)) return input.filter((item) => typeof item === 'string');
+  if (typeof input === 'string') {
+    try {
+      const parsed = JSON.parse(input);
+      if (Array.isArray(parsed)) return parsed.filter((item) => typeof item === 'string');
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 export async function getMaintenances(req: AuthenticatedRequest, res: Response) {
   const userId = req.user?.id;
   const carId = req.params.carId;
 
   try {
-    // Verify car ownership first
     const carCheck = await prisma.car.findFirst({
       where: {
         id: Number(carId),
         OR: [
           { user_id: userId },
-          { shares: { some: { user_id: userId } } }
-        ]
+          { shares: { some: { user_id: userId } } },
+        ],
       },
     });
 
@@ -32,7 +46,6 @@ export async function getMaintenances(req: AuthenticatedRequest, res: Response) 
       return res.status(403).json({ message: 'No tienes permiso para ver este coche' });
     }
 
-    // Get maintenances and their parts
     const maintenances = await prisma.maintenance.findMany({
       where: {
         car_id: Number(carId),
@@ -46,9 +59,14 @@ export async function getMaintenances(req: AuthenticatedRequest, res: Response) 
       ],
     });
 
-    res.json(maintenances);
+    const parsed = maintenances.map((m) => ({
+      ...m,
+      checklist: normalizeChecklist(m.checklist),
+    }));
+
+    res.json(parsed);
   } catch (err) {
-    console.error('Error fetching maintenances:', err);
+    logger.error({ err }, 'Error fetching maintenances');
     res.status(500).json({ message: 'Error al obtener los mantenimientos' });
   }
 }
@@ -56,21 +74,20 @@ export async function getMaintenances(req: AuthenticatedRequest, res: Response) 
 export async function createMaintenance(req: AuthenticatedRequest, res: Response) {
   const userId = req.user?.id;
   const carId = req.params.carId;
-  const { description, mileage, cost, date, parts, category, documentPath, checklist } = req.body;
+  const { description, details, mileage, cost, date, parts, category, documentPath, checklist } = req.body;
 
   if (!description || !mileage || !date) {
     return res.status(400).json({ message: 'Descripción, kilometraje y fecha son obligatorios' });
   }
 
   try {
-    // Verify car ownership
     const carCheck = await prisma.car.findFirst({
       where: {
         id: Number(carId),
         OR: [
           { user_id: userId },
-          { shares: { some: { user_id: userId } } }
-        ]
+          { shares: { some: { user_id: userId, can_edit: true } } },
+        ],
       },
     });
 
@@ -79,6 +96,7 @@ export async function createMaintenance(req: AuthenticatedRequest, res: Response
     }
 
     const currentCarMileage = carCheck.mileage || 0;
+    const cleanChecklist = normalizeChecklist(checklist);
 
     const result = await prisma.$transaction(async (tx) => {
       // 1. Insert Maintenance
@@ -86,12 +104,13 @@ export async function createMaintenance(req: AuthenticatedRequest, res: Response
         data: {
           car_id: Number(carId),
           description,
+          details: details || null,
           mileage: Number(mileage),
           cost: cost ? Number(cost) : 0,
           date: new Date(date),
           category: category || 'Otros',
           document_path: documentPath || null,
-          checklist: checklist || [],
+          checklist: cleanChecklist,
         },
       });
 
@@ -101,6 +120,28 @@ export async function createMaintenance(req: AuthenticatedRequest, res: Response
         for (const part of parts as PartInput[]) {
           if (!part.partName) continue;
 
+          // Prevent IDOR: only link to inventory if the inventory part belongs to the user or car owner
+          let validInventoryPartId: number | null = null;
+          if (part.inventoryPartId) {
+            const inventoryPart = await tx.inventoryPart.findFirst({
+              where: {
+                id: Number(part.inventoryPartId),
+                user_id: { in: [userId!, carCheck.user_id] },
+              },
+            });
+
+            if (inventoryPart) {
+              validInventoryPartId = inventoryPart.id;
+              const sub = part.quantity ? Number(part.quantity) : 1;
+              await tx.inventoryPart.update({
+                where: { id: inventoryPart.id },
+                data: {
+                  stock: Math.max(0, (inventoryPart.stock || 0) - sub),
+                },
+              });
+            }
+          }
+
           const newPart = await tx.part.create({
             data: {
               maintenance_id: maintenance.id,
@@ -109,27 +150,10 @@ export async function createMaintenance(req: AuthenticatedRequest, res: Response
               part_number: part.partNumber || null,
               quantity: part.quantity ? Number(part.quantity) : 1,
               price: part.price ? Number(part.price) : 0,
-              inventory_part_id: part.inventoryPartId || null,
+              inventory_part_id: validInventoryPartId,
             },
           });
           insertedParts.push(newPart);
-
-          // Decrement inventory stock if linked
-          if (part.inventoryPartId) {
-            const inventoryPart = await tx.inventoryPart.findUnique({
-              where: { id: Number(part.inventoryPartId) },
-            });
-            if (inventoryPart && inventoryPart.user_id === userId) {
-              const currentStock = inventoryPart.stock || 0;
-              const sub = part.quantity ? Number(part.quantity) : 1;
-              await tx.inventoryPart.update({
-                where: { id: Number(part.inventoryPartId) },
-                data: {
-                  stock: Math.max(0, currentStock - sub),
-                },
-              });
-            }
-          }
         }
       }
 
@@ -145,13 +169,14 @@ export async function createMaintenance(req: AuthenticatedRequest, res: Response
 
       return {
         ...maintenance,
+        checklist: cleanChecklist,
         parts: insertedParts,
       };
     });
 
     res.status(201).json(result);
   } catch (err) {
-    console.error('Error creating maintenance:', err);
+    logger.error({ err }, 'Error creating maintenance');
     res.status(500).json({ message: 'Error al registrar el mantenimiento' });
   }
 }
@@ -161,18 +186,18 @@ export async function deleteMaintenance(req: AuthenticatedRequest, res: Response
   const maintenanceId = req.params.id;
 
   try {
-    // Verify ownership via join
     const maintCheck = await prisma.maintenance.findFirst({
       where: {
         id: Number(maintenanceId),
         car: {
           OR: [
             { user_id: userId },
-            { shares: { some: { user_id: userId } } }
-          ]
+            { shares: { some: { user_id: userId, can_edit: true } } },
+          ],
         },
       },
       include: {
+        car: true,
         parts: true,
       },
     });
@@ -182,11 +207,14 @@ export async function deleteMaintenance(req: AuthenticatedRequest, res: Response
     }
 
     await prisma.$transaction(async (tx) => {
-      // 1. Restore stock for each linked part
+      // 1. Safely restore stock for each linked part owned by the user or car owner
       for (const part of maintCheck.parts) {
         if (part.inventory_part_id) {
-          await tx.inventoryPart.update({
-            where: { id: Number(part.inventory_part_id) },
+          await tx.inventoryPart.updateMany({
+            where: {
+              id: Number(part.inventory_part_id),
+              user_id: { in: [userId!, maintCheck.car.user_id] },
+            },
             data: {
               stock: {
                 increment: part.quantity || 1,
@@ -202,13 +230,31 @@ export async function deleteMaintenance(req: AuthenticatedRequest, res: Response
           id: Number(maintenanceId),
         },
       });
+
+      // 3. If this maintenance set the car's mileage, fall back to highest remaining
+      const car = await tx.car.findUnique({ where: { id: maintCheck.car_id } });
+      if (car && (car.mileage || 0) === maintCheck.mileage) {
+        const [fuelMax, maintMax] = await Promise.all([
+          tx.fuelLog.aggregate({ where: { car_id: car.id }, _max: { mileage: true } }),
+          tx.maintenance.aggregate({ where: { car_id: car.id }, _max: { mileage: true } }),
+        ]);
+        const candidates = [fuelMax._max.mileage, maintMax._max.mileage].filter(
+          (v): v is number => typeof v === 'number'
+        );
+        if (candidates.length > 0) {
+          await tx.car.update({
+            where: { id: car.id },
+            data: { mileage: Math.max(...candidates) },
+          });
+        }
+      }
     });
 
     deleteUploadedFile(maintCheck.document_path);
 
     res.json({ message: 'Mantenimiento eliminado correctamente' });
   } catch (err) {
-    console.error('Error deleting maintenance:', err);
+    logger.error({ err }, 'Error deleting maintenance');
     res.status(500).json({ message: 'Error al eliminar el mantenimiento' });
   }
 }
@@ -222,8 +268,8 @@ export async function getAllMaintenances(req: AuthenticatedRequest, res: Respons
         car: {
           OR: [
             { user_id: userId },
-            { shares: { some: { user_id: userId } } }
-          ]
+            { shares: { some: { user_id: userId } } },
+          ],
         },
       },
       include: {
@@ -245,12 +291,13 @@ export async function getAllMaintenances(req: AuthenticatedRequest, res: Respons
       id: m.id,
       car_id: m.car_id,
       description: m.description,
+      details: m.details,
       mileage: m.mileage,
       cost: m.cost,
       date: m.date,
       category: m.category,
       document_path: m.document_path,
-      checklist: m.checklist,
+      checklist: normalizeChecklist(m.checklist),
       created_at: m.created_at,
       brand: m.car?.brand,
       model: m.car?.model,
@@ -259,7 +306,7 @@ export async function getAllMaintenances(req: AuthenticatedRequest, res: Respons
 
     res.json(flattened);
   } catch (err) {
-    console.error('Error fetching all user maintenances:', err);
+    logger.error({ err }, 'Error fetching all user maintenances');
     res.status(500).json({ message: 'Error al obtener los mantenimientos' });
   }
 }
@@ -274,15 +321,14 @@ export async function updateMaintenance(req: AuthenticatedRequest, res: Response
   }
 
   try {
-    // Verify ownership via join
     const maintCheck = await prisma.maintenance.findFirst({
       where: {
         id: Number(maintenanceId),
         car: {
           OR: [
             { user_id: userId },
-            { shares: { some: { user_id: userId } } }
-          ]
+            { shares: { some: { user_id: userId, can_edit: true } } },
+          ],
         },
       },
     });
@@ -290,6 +336,8 @@ export async function updateMaintenance(req: AuthenticatedRequest, res: Response
     if (!maintCheck) {
       return res.status(403).json({ message: 'No autorizado para editar este mantenimiento' });
     }
+
+    const cleanChecklist = normalizeChecklist(checklist);
 
     const updatedMaintenance = await prisma.maintenance.update({
       where: {
@@ -303,7 +351,7 @@ export async function updateMaintenance(req: AuthenticatedRequest, res: Response
         date: new Date(date),
         category: category || 'Otros',
         document_path: documentPath || null,
-        checklist: checklist || [],
+        checklist: cleanChecklist,
       },
     });
 
@@ -312,9 +360,12 @@ export async function updateMaintenance(req: AuthenticatedRequest, res: Response
       deleteUploadedFile(maintCheck.document_path);
     }
 
-    res.json(updatedMaintenance);
+    res.json({
+      ...updatedMaintenance,
+      checklist: cleanChecklist,
+    });
   } catch (err) {
-    console.error('Error updating maintenance:', err);
+    logger.error({ err }, 'Error updating maintenance');
     res.status(500).json({ message: 'Error al actualizar el mantenimiento' });
   }
 }

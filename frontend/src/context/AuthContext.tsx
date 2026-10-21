@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 interface User {
   id: number;
@@ -15,28 +15,28 @@ interface AuthContextType {
   login: (token: string, user: User, refreshToken?: string) => void;
   registerUser: (token: string, user: User, refreshToken?: string) => void;
   logout: () => void;
-  apiFetch: (path: string, options?: RequestInit) => Promise<any>;
+  apiFetch: <T = any>(path: string, options?: RequestInit) => Promise<T>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Shared singleton promise to avoid race conditions when multiple requests return 401
+let refreshPromise: Promise<string | null> | null = null;
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const storedToken = localStorage.getItem('token');
-    const storedUser = localStorage.getItem('user');
-
-    if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
-    }
-    setLoading(false);
+  const logout = useCallback(() => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('refreshToken');
+    setToken(null);
+    setUser(null);
   }, []);
 
-  const login = (newToken: string, newUser: User, newRefreshToken?: string) => {
+  const login = useCallback((newToken: string, newUser: User, newRefreshToken?: string) => {
     localStorage.setItem('token', newToken);
     localStorage.setItem('user', JSON.stringify(newUser));
     if (newRefreshToken) {
@@ -44,22 +44,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setToken(newToken);
     setUser(newUser);
-  };
+  }, []);
 
-  const registerUser = (newToken: string, newUser: User, newRefreshToken?: string) => {
+  const registerUser = useCallback((newToken: string, newUser: User, newRefreshToken?: string) => {
     login(newToken, newUser, newRefreshToken);
-  };
+  }, [login]);
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    localStorage.removeItem('refreshToken');
-    setToken(null);
-    setUser(null);
-  };
+  useEffect(() => {
+    const storedToken = localStorage.getItem('token');
+    const storedUser = localStorage.getItem('user');
 
-  const apiFetch = async (path: string, options: RequestInit = {}) => {
-    const apiBase = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.port === '5173' ? 'http://localhost:5001' : '');
+    if (storedToken && storedUser) {
+      try {
+        const parsed = JSON.parse(storedUser);
+        setToken(storedToken);
+        setUser(parsed);
+      } catch {
+        logout();
+      }
+    }
+    setLoading(false);
+  }, [logout]);
+
+  const apiFetch = useCallback(async <T = any>(path: string, options: RequestInit = {}): Promise<T> => {
+    const apiBase =
+      import.meta.env.VITE_API_URL ||
+      (typeof window !== 'undefined' && window.location.port === '5173' ? 'http://localhost:5001' : '');
     const url = `${apiBase}${path}`;
 
     const headers = new Headers(options.headers || {});
@@ -78,44 +88,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (!res.ok) {
       const currentRefreshToken = localStorage.getItem('refreshToken');
-      if (
-        res.status === 401 &&
-        currentRefreshToken &&
-        path !== '/api/auth/refresh' &&
-        path !== '/api/auth/login' &&
-        path !== '/api/auth/register'
-      ) {
-        try {
-          const refreshRes = await fetch(`${apiBase}/api/auth/refresh`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ refreshToken: currentRefreshToken }),
-          });
+      const isAuthEndpoint =
+        path.startsWith('/api/auth/refresh') ||
+        path.startsWith('/api/auth/login') ||
+        path.startsWith('/api/auth/register');
 
-          if (refreshRes.ok) {
-            const refreshData = await refreshRes.json();
-            // Update token context and localStorage
-            login(refreshData.token, refreshData.user, refreshData.refreshToken);
+      if (res.status === 401 && currentRefreshToken && !isAuthEndpoint) {
+        if (!refreshPromise) {
+          refreshPromise = (async () => {
+            try {
+              const refreshRes = await fetch(`${apiBase}/api/auth/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refreshToken: currentRefreshToken }),
+              });
 
-            // Re-execute original request with new token
-            const newHeaders = new Headers(options.headers || {});
-            newHeaders.set('Authorization', `Bearer ${refreshData.token}`);
-            if (!(options.body instanceof FormData) && !newHeaders.has('Content-Type')) {
-              newHeaders.set('Content-Type', 'application/json');
+              if (refreshRes.ok) {
+                const refreshData = await refreshRes.json();
+                login(refreshData.token, refreshData.user, refreshData.refreshToken);
+                return refreshData.token as string;
+              } else {
+                logout();
+                return null;
+              }
+            } catch (err) {
+              console.error('Error refreshing token:', err);
+              logout();
+              return null;
+            } finally {
+              refreshPromise = null;
             }
+          })();
+        }
 
-            res = await fetch(url, {
-              ...options,
-              headers: newHeaders,
-            });
-          } else {
-            logout();
+        const refreshedToken = await refreshPromise;
+
+        if (refreshedToken) {
+          const newHeaders = new Headers(options.headers || {});
+          newHeaders.set('Authorization', `Bearer ${refreshedToken}`);
+          if (!(options.body instanceof FormData) && !newHeaders.has('Content-Type')) {
+            newHeaders.set('Content-Type', 'application/json');
           }
-        } catch (refreshErr) {
-          console.error('Error refreshing token:', refreshErr);
-          logout();
+
+          res = await fetch(url, {
+            ...options,
+            headers: newHeaders,
+          });
         }
       }
     }
@@ -125,27 +143,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const errJson = await res.json();
         errorMessage = errJson.message || errorMessage;
-      } catch (e) {
+      } catch {
         // Fallback to text or generic error
       }
 
-      // Auto-logout if token is invalid or expired
-      if (res.status === 401 || res.status === 403 || errorMessage === 'Token is not valid' || errorMessage === 'No token, authorization denied') {
+      // ONLY logout on 401 when token cannot be refreshed. Never on 403 (Forbidden)!
+      if (
+        res.status === 401 &&
+        (errorMessage === 'Token is not valid' ||
+          errorMessage === 'No token provided, authorization denied' ||
+          errorMessage === 'Sesión expirada. Por favor, inicia sesión de nuevo.' ||
+          errorMessage === 'Tu cuenta ha sido deshabilitada por el administrador')
+      ) {
         logout();
       }
 
       throw new Error(errorMessage);
     }
 
-    // Handled returning empty response or deleted status
-    if (res.status === 204) return null;
-    
+    if (res.status === 204) return null as T;
+
     try {
-      return await res.json();
-    } catch (err) {
-      return null;
+      return (await res.json()) as T;
+    } catch {
+      return null as T;
     }
-  };
+  }, [token, login, logout]);
 
   const value: AuthContextType = {
     token,

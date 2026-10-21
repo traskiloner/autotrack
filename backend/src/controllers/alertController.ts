@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../db';
 import { sendNewAlertEmail } from '../services/emailService';
+import { logger } from '../logger';
 
 export async function getUserAlerts(req: AuthenticatedRequest, res: Response) {
   const userId = req.user?.id;
@@ -13,8 +14,8 @@ export async function getUserAlerts(req: AuthenticatedRequest, res: Response) {
         car: {
           OR: [
             { user_id: userId },
-            { shares: { some: { user_id: userId } } }
-          ]
+            { shares: { some: { user_id: userId } } },
+          ],
         },
       },
       include: {
@@ -49,7 +50,7 @@ export async function getUserAlerts(req: AuthenticatedRequest, res: Response) {
 
     res.json(flattened);
   } catch (err) {
-    console.error('Error fetching global alerts:', err);
+    logger.error({ err }, 'Error fetching global alerts');
     res.status(500).json({ message: 'Error al obtener las alertas globales' });
   }
 }
@@ -59,14 +60,13 @@ export async function getCarAlerts(req: AuthenticatedRequest, res: Response) {
   const carId = req.params.carId;
 
   try {
-    // Check car ownership
     const carCheck = await prisma.car.findFirst({
       where: {
         id: Number(carId),
         OR: [
           { user_id: userId },
-          { shares: { some: { user_id: userId } } }
-        ]
+          { shares: { some: { user_id: userId } } },
+        ],
       },
     });
 
@@ -86,7 +86,7 @@ export async function getCarAlerts(req: AuthenticatedRequest, res: Response) {
     });
     res.json(alerts);
   } catch (err) {
-    console.error('Error fetching car alerts:', err);
+    logger.error({ err }, 'Error fetching car alerts');
     res.status(500).json({ message: 'Error al obtener las alertas' });
   }
 }
@@ -105,14 +105,13 @@ export async function createAlert(req: AuthenticatedRequest, res: Response) {
   }
 
   try {
-    // Check car ownership and fetch owner and shared users
     const carCheck = await prisma.car.findFirst({
       where: {
         id: Number(carId),
         OR: [
           { user_id: userId },
-          { shares: { some: { user_id: userId } } }
-        ]
+          { shares: { some: { user_id: userId, can_edit: true } } },
+        ],
       },
       include: {
         user: true,
@@ -141,7 +140,7 @@ export async function createAlert(req: AuthenticatedRequest, res: Response) {
     const carInfo = `${carCheck.brand} ${carCheck.model} (${carCheck.license_plate})`;
     const targetDateStr = targetDate ? new Date(targetDate).toLocaleDateString('es-ES') : '';
     const targetMileageStr = targetMileage ? `${targetMileage} km` : '';
-    
+
     let criteria = '';
     if (targetDateStr && targetMileageStr) {
       criteria = ` (Para: ${targetDateStr} o ${targetMileageStr})`;
@@ -150,22 +149,22 @@ export async function createAlert(req: AuthenticatedRequest, res: Response) {
     } else if (targetMileageStr) {
       criteria = ` (Para: ${targetMileageStr})`;
     }
-    
+
     const alertInfo = `${description}${criteria}`;
 
     // Notify owner
-    if (carCheck.user) {
-      sendNewAlertEmail(carCheck.user.email, carCheck.user.username, carInfo, alertInfo).catch(err => {
-        console.error('Error sending alert email to owner:', err);
+    if (carCheck.user && carCheck.user.id !== userId) {
+      sendNewAlertEmail(carCheck.user.email, carCheck.user.username, carInfo, alertInfo).catch((err) => {
+        logger.error({ err }, 'Error sending alert email to owner');
       });
     }
 
     // Notify shared users
     if (carCheck.shares) {
       for (const share of carCheck.shares) {
-        if (share.user) {
-          sendNewAlertEmail(share.user.email, share.user.username, carInfo, alertInfo).catch(err => {
-            console.error('Error sending alert email to shared user:', err);
+        if (share.user && share.user.id !== userId) {
+          sendNewAlertEmail(share.user.email, share.user.username, carInfo, alertInfo).catch((err) => {
+            logger.error({ err }, 'Error sending alert email to shared user');
           });
         }
       }
@@ -173,7 +172,7 @@ export async function createAlert(req: AuthenticatedRequest, res: Response) {
 
     res.status(201).json(alert);
   } catch (err) {
-    console.error('Error creating alert:', err);
+    logger.error({ err }, 'Error creating alert');
     res.status(500).json({ message: 'Error al registrar la alerta' });
   }
 }
@@ -183,15 +182,14 @@ export async function completeAlert(req: AuthenticatedRequest, res: Response) {
   const alertId = req.params.id;
 
   try {
-    // Verify ownership via join
     const alert = await prisma.maintenanceAlert.findFirst({
       where: {
         id: Number(alertId),
         car: {
           OR: [
             { user_id: userId },
-            { shares: { some: { user_id: userId } } }
-          ]
+            { shares: { some: { user_id: userId, can_edit: true } } },
+          ],
         },
       },
     });
@@ -211,7 +209,7 @@ export async function completeAlert(req: AuthenticatedRequest, res: Response) {
 
     res.json(updated);
   } catch (err) {
-    console.error('Error completing alert:', err);
+    logger.error({ err }, 'Error completing alert');
     res.status(500).json({ message: 'Error al completar la alerta' });
   }
 }
@@ -221,15 +219,14 @@ export async function deleteAlert(req: AuthenticatedRequest, res: Response) {
   const alertId = req.params.id;
 
   try {
-    // Verify ownership via join
     const alert = await prisma.maintenanceAlert.findFirst({
       where: {
         id: Number(alertId),
         car: {
           OR: [
             { user_id: userId },
-            { shares: { some: { user_id: userId } } }
-          ]
+            { shares: { some: { user_id: userId, can_edit: true } } },
+          ],
         },
       },
     });
@@ -246,7 +243,7 @@ export async function deleteAlert(req: AuthenticatedRequest, res: Response) {
 
     res.json({ message: 'Alerta eliminada correctamente' });
   } catch (err) {
-    console.error('Error deleting alert:', err);
+    logger.error({ err }, 'Error deleting alert');
     res.status(500).json({ message: 'Error al eliminar la alerta' });
   }
 }

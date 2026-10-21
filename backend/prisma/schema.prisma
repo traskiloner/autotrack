@@ -6,28 +6,58 @@ datasource db {
   provider = "postgresql"
 }
 
+enum Role {
+  user
+  admin
+}
+
 model User {
   id             Int             @id @default(autoincrement())
   username       String          @unique @db.VarChar(50)
   email          String          @unique @db.VarChar(100)
   password_hash  String          @db.VarChar(255)
-  role           String          @default("user") @db.VarChar(20)
+  role           Role            @default(user)
   created_at     DateTime        @default(now()) @db.Timestamp()
   is_active      Boolean         @default(true)
   login_count    Int             @default(0)
   last_login_ip  String?         @db.VarChar(45)
   last_login_at  DateTime?       @db.Timestamp()
+  // Incremented whenever all sessions of the user must be invalidated
+  // (password change, account disabled, role change...).
+  token_version  Int             @default(0)
   cars           Car[]
   inventory      InventoryPart[]
   shared_cars    CarShare[]
+  refresh_tokens RefreshToken[]
 
   @@map("users")
 }
 
+model RefreshToken {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  // SHA-256 of the opaque token handed to the client (the raw token is never stored)
+  token_hash String   @unique @db.VarChar(64)
+  expires_at DateTime @db.Timestamp()
+  created_at DateTime @default(now()) @db.Timestamp()
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("refresh_tokens")
+}
+
+// Key/value store for values generated automatically at startup (e.g. secrets).
+model AppSetting {
+  key        String   @id @db.VarChar(100)
+  value      String   @db.Text
+  created_at DateTime @default(now()) @db.Timestamp()
+
+  @@map("app_settings")
+}
 
 model Car {
   id            Int                @id @default(autoincrement())
-  user_id       Int?
+  user_id       Int
   brand         String             @db.VarChar(50)
   model         String             @db.VarChar(50)
   year          Int
@@ -39,18 +69,19 @@ model Car {
   tire_size     String?            @db.VarChar(50)
   oil_type      String?            @db.VarChar(50)
   created_at    DateTime?          @default(now()) @db.Timestamp()
-  user          User?              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user          User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
   maintenances  Maintenance[]
   alerts        MaintenanceAlert[]
   fuel_logs     FuelLog[]
   shares        CarShare[]
 
+  @@index([user_id])
   @@map("cars")
 }
 
 model Maintenance {
   id            Int       @id @default(autoincrement())
-  car_id        Int?
+  car_id        Int
   description   String    @db.Text
   details       String?   @db.Text
   mileage       Int
@@ -60,15 +91,17 @@ model Maintenance {
   document_path String?   @db.VarChar(255)
   checklist     Json?     @default("[]") @db.JsonB
   created_at    DateTime? @default(now()) @db.Timestamp()
-  car           Car?      @relation(fields: [car_id], references: [id], onDelete: Cascade)
+  car           Car       @relation(fields: [car_id], references: [id], onDelete: Cascade)
   parts         Part[]
 
+  @@index([car_id])
+  @@index([document_path])
   @@map("maintenances")
 }
 
 model InventoryPart {
   id           Int       @id @default(autoincrement())
-  user_id      Int?
+  user_id      Int
   name         String    @db.VarChar(100)
   brand        String?   @db.VarChar(50)
   part_number  String?   @db.VarChar(50)
@@ -76,15 +109,16 @@ model InventoryPart {
   stock        Int?      @default(0)
   purchase_url String?   @db.Text
   created_at   DateTime? @default(now()) @db.Timestamp()
-  user         User?     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
   parts        Part[]
 
+  @@index([user_id])
   @@map("inventory_parts")
 }
 
 model Part {
   id                Int            @id @default(autoincrement())
-  maintenance_id    Int?
+  maintenance_id    Int
   part_name         String         @db.VarChar(100)
   brand             String?        @db.VarChar(50)
   part_number       String?        @db.VarChar(50)
@@ -92,22 +126,25 @@ model Part {
   price             Decimal?       @default(0.00) @db.Decimal(10, 2)
   inventory_part_id Int?
   created_at        DateTime?      @default(now()) @db.Timestamp()
-  maintenance       Maintenance?   @relation(fields: [maintenance_id], references: [id], onDelete: Cascade)
+  maintenance       Maintenance    @relation(fields: [maintenance_id], references: [id], onDelete: Cascade)
   inventory_part    InventoryPart? @relation(fields: [inventory_part_id], references: [id], onDelete: SetNull)
 
+  @@index([maintenance_id])
+  @@index([inventory_part_id])
   @@map("parts")
 }
 
 model MaintenanceAlert {
   id             Int       @id @default(autoincrement())
-  car_id         Int?
+  car_id         Int
   description    String    @db.VarChar(255)
   target_date    DateTime? @db.Date
   target_mileage Int?
   is_completed   Boolean?  @default(false)
   created_at     DateTime? @default(now()) @db.Timestamp()
-  car            Car?      @relation(fields: [car_id], references: [id], onDelete: Cascade)
+  car            Car       @relation(fields: [car_id], references: [id], onDelete: Cascade)
 
+  @@index([car_id])
   @@map("maintenance_alerts")
 }
 
@@ -123,6 +160,7 @@ model FuelLog {
   created_at      DateTime? @default(now()) @db.Timestamp()
   car             Car       @relation(fields: [car_id], references: [id], onDelete: Cascade)
 
+  @@index([car_id])
   @@map("fuel_logs")
 }
 
@@ -130,12 +168,14 @@ model CarShare {
   id         Int      @id @default(autoincrement())
   car_id     Int
   user_id    Int
+  // false = read-only access for the shared user
+  can_edit   Boolean  @default(true)
   created_at DateTime @default(now()) @db.Timestamp()
-  
+
   car  Car  @relation(fields: [car_id], references: [id], onDelete: Cascade)
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@unique([car_id, user_id])
+  @@index([user_id])
   @@map("car_shares")
 }
-

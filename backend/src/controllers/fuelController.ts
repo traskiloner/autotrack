@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../db';
+import { logger } from '../logger';
 
 interface FuelInput {
   date: Date;
@@ -11,10 +12,6 @@ interface FuelInput {
   isFullTank: boolean;
 }
 
-/**
- * Validates and normalizes a fuel log payload.
- * Returns either the parsed data or an error message.
- */
 function parseFuelInput(body: any): { data?: FuelInput; error?: string } {
   const { date, mileage, liters, pricePerLiter, totalCost, isFullTank } = body || {};
 
@@ -66,14 +63,13 @@ export async function getCarFuelLogs(req: AuthenticatedRequest, res: Response) {
   const carId = req.params.carId;
 
   try {
-    // Verify car ownership first
     const carCheck = await prisma.car.findFirst({
       where: {
         id: Number(carId),
         OR: [
           { user_id: userId },
-          { shares: { some: { user_id: userId } } }
-        ]
+          { shares: { some: { user_id: userId } } },
+        ],
       },
     });
 
@@ -92,7 +88,7 @@ export async function getCarFuelLogs(req: AuthenticatedRequest, res: Response) {
 
     res.json(logs);
   } catch (err) {
-    console.error('Error fetching fuel logs:', err);
+    logger.error({ err }, 'Error fetching fuel logs');
     res.status(500).json({ message: 'Error al obtener los registros de combustible' });
   }
 }
@@ -107,14 +103,13 @@ export async function createFuelLog(req: AuthenticatedRequest, res: Response) {
   const input = parsed.data;
 
   try {
-    // Verify car ownership
     const carCheck = await prisma.car.findFirst({
       where: {
         id: Number(carId),
         OR: [
           { user_id: userId },
-          { shares: { some: { user_id: userId } } }
-        ]
+          { shares: { some: { user_id: userId, can_edit: true } } },
+        ],
       },
     });
 
@@ -125,7 +120,6 @@ export async function createFuelLog(req: AuthenticatedRequest, res: Response) {
     const currentCarMileage = carCheck.mileage || 0;
 
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Create fuel log
       const log = await tx.fuelLog.create({
         data: {
           car_id: Number(carId),
@@ -138,7 +132,6 @@ export async function createFuelLog(req: AuthenticatedRequest, res: Response) {
         },
       });
 
-      // 2. Update Car Mileage if the fuel log mileage is higher
       if (input.mileage > currentCarMileage) {
         await tx.car.update({
           where: { id: Number(carId) },
@@ -153,7 +146,7 @@ export async function createFuelLog(req: AuthenticatedRequest, res: Response) {
 
     res.status(201).json(result);
   } catch (err) {
-    console.error('Error creating fuel log:', err);
+    logger.error({ err }, 'Error creating fuel log');
     res.status(500).json({ message: 'Error al registrar el repostaje' });
   }
 }
@@ -175,8 +168,8 @@ export async function updateFuelLog(req: AuthenticatedRequest, res: Response) {
         car: {
           OR: [
             { user_id: userId },
-            { shares: { some: { user_id: userId } } }
-          ]
+            { shares: { some: { user_id: userId, can_edit: true } } },
+          ],
         },
       },
       include: { car: true },
@@ -211,7 +204,7 @@ export async function updateFuelLog(req: AuthenticatedRequest, res: Response) {
 
     res.json(updated);
   } catch (err) {
-    console.error('Error updating fuel log:', err);
+    logger.error({ err }, 'Error updating fuel log');
     res.status(500).json({ message: 'Error al actualizar el repostaje' });
   }
 }
@@ -221,15 +214,14 @@ export async function deleteFuelLog(req: AuthenticatedRequest, res: Response) {
   const logId = req.params.id;
 
   try {
-    // Verify ownership via join
     const logCheck = await prisma.fuelLog.findFirst({
       where: {
         id: Number(logId),
         car: {
           OR: [
             { user_id: userId },
-            { shares: { some: { user_id: userId } } }
-          ]
+            { shares: { some: { user_id: userId, can_edit: true } } },
+          ],
         },
       },
     });
@@ -245,8 +237,6 @@ export async function deleteFuelLog(req: AuthenticatedRequest, res: Response) {
         },
       });
 
-      // If this log was what set the car's current mileage, fall back to the
-      // highest remaining known mileage (other fuel logs or maintenances).
       const car = await tx.car.findUnique({ where: { id: logCheck.car_id } });
       if (car && (car.mileage || 0) === logCheck.mileage) {
         const [fuelMax, maintMax] = await Promise.all([
@@ -267,7 +257,7 @@ export async function deleteFuelLog(req: AuthenticatedRequest, res: Response) {
 
     res.json({ message: 'Repostaje eliminado correctamente' });
   } catch (err) {
-    console.error('Error deleting fuel log:', err);
+    logger.error({ err }, 'Error deleting fuel log');
     res.status(500).json({ message: 'Error al eliminar el repostaje' });
   }
 }

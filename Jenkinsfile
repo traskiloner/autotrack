@@ -42,6 +42,14 @@ pipeline {
             }
         }
 
+        stage('Validación y Pruebas') {
+            steps {
+                echo 'Ejecutando compilación TypeScript y pruebas unitarias...'
+                sh 'npm run build'
+                sh 'npm test -w backend'
+            }
+        }
+
         stage('Compilar y Etiquetar Imágenes') {
             steps {
                 script {
