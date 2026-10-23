@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import nodemailer, { type Transporter } from 'nodemailer';
 import { logger } from '../logger';
 
 const host = process.env.SMTP_HOST;
@@ -9,7 +9,7 @@ const from = process.env.SMTP_FROM || `"AutoTrack" <noreply@autotrack.local>`;
 
 const isMock = !host || !user || !pass;
 
-let transporter: nodemailer.Transporter | null = null;
+let transporter: Transporter | null = null;
 
 if (!isMock) {
   transporter = nodemailer.createTransport({
