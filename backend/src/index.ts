@@ -24,6 +24,7 @@ import {
   adminCreateUserSchema,
   adminUpdateUserSchema,
   transferCarSchema,
+  sharePermissionSchema,
 } from '@autotrack/shared';
 import { validateBody } from './middlewares/validate';
 import {
@@ -43,6 +44,7 @@ import {
   getCarShares,
   shareCar,
   unshareCar,
+  updateCarShare,
 } from './controllers/carController';
 import {
   getMaintenances,
@@ -186,6 +188,7 @@ app.put('/api/cars/:id', authMiddleware, validateBody(carUpdateSchema), updateCa
 app.delete('/api/cars/:id', authMiddleware, deleteCar);
 app.get('/api/cars/:carId/shares', authMiddleware, getCarShares);
 app.post('/api/cars/:carId/share', authMiddleware, validateBody(shareCarSchema), shareCar);
+app.put('/api/cars/:carId/share/:userId', authMiddleware, validateBody(sharePermissionSchema), updateCarShare);
 app.delete('/api/cars/:carId/share/:userId', authMiddleware, unshareCar);
 
 // Maintenance Routes

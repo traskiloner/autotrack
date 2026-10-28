@@ -9,6 +9,7 @@ import {
   carSchema,
   maintenanceSchema,
   fuelLogSchema,
+  sharePermissionSchema,
 } from '@autotrack/shared';
 
 describe('Security & Validation Tests', () => {
@@ -95,6 +96,13 @@ describe('Security & Validation Tests', () => {
       });
       expect(result.success).toBe(false);
     });
+
+    it('validates share permission schema correctly', () => {
+      expect(sharePermissionSchema.safeParse({ canEdit: true }).success).toBe(true);
+      expect(sharePermissionSchema.safeParse({ canEdit: false }).success).toBe(true);
+      expect(sharePermissionSchema.safeParse({ canEdit: 'yes' }).success).toBe(false);
+      expect(sharePermissionSchema.safeParse({}).success).toBe(false);
+    });
   });
 
   describe('HTTP Endpoints Authorization & Protection', () => {
@@ -106,6 +114,13 @@ describe('Security & Validation Tests', () => {
 
     it('returns 401 when accessing protected /api/inventory without token', async () => {
       const res = await request(app).get('/api/inventory');
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 401 when updating share role without token', async () => {
+      const res = await request(app)
+        .put('/api/cars/1/share/2')
+        .send({ canEdit: true });
       expect(res.status).toBe(401);
     });
 

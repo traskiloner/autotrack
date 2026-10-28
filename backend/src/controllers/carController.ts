@@ -121,6 +121,19 @@ export async function createCar(req: AuthenticatedRequest, res: Response) {
         oil_type: oilType || null,
       },
     });
+
+    // Create default customizable periodic oil change & maintenance milestone (every 15.000 km)
+    const baseMileage = Number(mileage) || 0;
+    await prisma.maintenanceAlert.create({
+      data: {
+        car_id: car.id,
+        description: 'Cambio de aceite y revisión periódica (cada 15.000 km)',
+        target_mileage: baseMileage + 15000,
+      },
+    }).catch((alertErr) => {
+      logger.error({ alertErr }, 'Error creating default oil change alert');
+    });
+
     res.status(201).json({
       ...car,
       access: 'owner',
@@ -137,16 +150,19 @@ export async function updateCar(req: AuthenticatedRequest, res: Response) {
   const { brand, model, year, licensePlate, color, mileage, engineCode, vin, tireSize, oilType } = req.body;
 
   try {
-    // Only owner can update technical car metadata
-    const checkOwnership = await prisma.car.findFirst({
+    // Owner or shared user with can_edit: true can update car metadata
+    const checkAccess = await prisma.car.findFirst({
       where: {
         id: Number(carId),
-        user_id: userId,
+        OR: [
+          { user_id: userId },
+          { shares: { some: { user_id: userId, can_edit: true } } },
+        ],
       },
     });
 
-    if (!checkOwnership) {
-      return res.status(404).json({ message: 'Coche no encontrado o no autorizado' });
+    if (!checkAccess) {
+      return res.status(403).json({ message: 'Coche no encontrado o no tienes permiso para editarlo' });
     }
 
     const updatedCar = await prisma.car.update({
@@ -167,9 +183,10 @@ export async function updateCar(req: AuthenticatedRequest, res: Response) {
       },
     });
 
+    const access: 'owner' | 'editor' = checkAccess.user_id === userId ? 'owner' : 'editor';
     res.json({
       ...updatedCar,
-      access: 'owner',
+      access,
     });
   } catch (err) {
     logger.error({ err }, 'Error updating car');
@@ -399,3 +416,66 @@ export async function unshareCar(req: AuthenticatedRequest, res: Response) {
     res.status(500).json({ message: 'Error al revocar el acceso' });
   }
 }
+
+export async function updateCarShare(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user?.id;
+  const carId = req.params.carId;
+  const targetUserId = req.params.userId;
+  const { canEdit } = req.body;
+
+  try {
+    const car = await prisma.car.findFirst({
+      where: {
+        id: Number(carId),
+        user_id: userId,
+      },
+    });
+
+    if (!car) {
+      return res.status(403).json({ message: 'No tienes permiso para gestionar los permisos de este coche' });
+    }
+
+    const share = await prisma.carShare.findUnique({
+      where: {
+        car_id_user_id: {
+          car_id: Number(carId),
+          user_id: Number(targetUserId),
+        },
+      },
+    });
+
+    if (!share) {
+      return res.status(404).json({ message: 'El usuario no tiene acceso compartido a este coche' });
+    }
+
+    const updated = await prisma.carShare.update({
+      where: {
+        car_id_user_id: {
+          car_id: Number(carId),
+          user_id: Number(targetUserId),
+        },
+      },
+      data: {
+        can_edit: Boolean(canEdit),
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    res.json({
+      ...updated.user,
+      can_edit: updated.can_edit,
+    });
+  } catch (err) {
+    logger.error({ err }, 'Error updating car share permission');
+    res.status(500).json({ message: 'Error al actualizar el permiso de acceso' });
+  }
+}
+

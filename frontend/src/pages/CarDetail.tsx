@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ArrowLeft, Plus, Trash2, Calendar, Milestone, Coins, Layers, Wrench, AlertTriangle, Loader2, Check, Bell, BellOff, Fuel, Droplet, TrendingUp, X, FileText, Edit3 } from 'lucide-react';
-import { Maintenance, CarData, Alert, InventoryPart, FuelLog } from '@autotrack/shared';
+import { ArrowLeft, Plus, Trash2, Calendar, Milestone, Coins, Layers, Wrench, AlertTriangle, Loader2, Check, Bell, BellOff, Fuel, Droplet, TrendingUp, X, FileText, Edit3, Eye, Shield } from 'lucide-react';
+import { Maintenance, CarData, Alert, InventoryPart, FuelLog, CarShareUser } from '@autotrack/shared';
 
 interface CarDetailProps {
   carId: number;
@@ -81,11 +81,16 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
   const [activeTab, setActiveTab] = useState<'maintenance' | 'alerts' | 'fuel' | 'share'>('maintenance');
 
   // Sharing States
-  const [shares, setShares] = useState<{ id: number; username: string; email: string }[]>([]);
+  const [shares, setShares] = useState<CarShareUser[]>([]);
   const [shareIdentifier, setShareIdentifier] = useState('');
+  const [shareRole, setShareRole] = useState<'editor' | 'viewer'>('editor');
   const [sharing, setSharing] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
+
+  // Default Periodic Oil Alert Quick Add State
+  const [oilInterval, setOilInterval] = useState<number>(15000);
+  const [creatingOilAlert, setCreatingOilAlert] = useState(false);
 
   // Document Preview State
   const [previewDocUrl, setPreviewDocUrl] = useState<string | null>(null);
@@ -237,15 +242,30 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
     try {
       const newUser = await apiFetch(`/api/cars/${carId}/share`, {
         method: 'POST',
-        body: JSON.stringify({ identifier: shareIdentifier }),
+        body: JSON.stringify({
+          identifier: shareIdentifier,
+          canEdit: shareRole === 'editor',
+        }),
       });
       setShares([...shares, newUser]);
       setShareIdentifier('');
-      setShareSuccess('Vehículo compartido correctamente');
+      setShareSuccess(`Vehículo compartido correctamente con rol ${shareRole === 'editor' ? 'Editor' : 'Visualizador'}`);
     } catch (err: any) {
       setShareError(err.message || 'Error al compartir el vehículo');
     } finally {
       setSharing(false);
+    }
+  };
+
+  const handleToggleShareRole = async (targetUserId: number, currentCanEdit: boolean) => {
+    try {
+      const updated = await apiFetch(`/api/cars/${carId}/share/${targetUserId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ canEdit: !currentCanEdit }),
+      });
+      setShares(shares.map(s => s.id === targetUserId ? { ...s, can_edit: updated.can_edit } : s));
+    } catch (err: any) {
+      alert(err.message || 'Error al cambiar el rol del usuario');
     }
   };
 
@@ -259,6 +279,26 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
       setShares(shares.filter(s => s.id !== targetUserId));
     } catch (err: any) {
       alert(err.message || 'Error al revocar acceso');
+    }
+  };
+
+  const handleCreateDefaultOilAlert = async (selectedKm: number) => {
+    if (!car) return;
+    setCreatingOilAlert(true);
+    try {
+      const targetKm = car.mileage + selectedKm;
+      const newAlert = await apiFetch(`/api/cars/${carId}/alerts`, {
+        method: 'POST',
+        body: JSON.stringify({
+          description: `Cambio de aceite y revisión periódica (cada ${selectedKm.toLocaleString()} km)`,
+          targetMileage: targetKm,
+        }),
+      });
+      setAlerts([...alerts, newAlert]);
+    } catch (err: any) {
+      alert(err.message || 'Error al crear la alerta de cambio de aceite');
+    } finally {
+      setCreatingOilAlert(false);
     }
   };
 
@@ -458,10 +498,36 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
 
   const handleCompleteAlert = async (alertId: number) => {
     try {
+      const targetAlert = alerts.find((a) => a.id === alertId);
       const updated = await apiFetch(`/api/alerts/${alertId}/complete`, {
         method: 'PUT',
       });
-      setAlerts(alerts.map((a) => (a.id === alertId ? updated : a)));
+      let nextAlerts = alerts.map((a) => (a.id === alertId ? updated : a));
+
+      // If it is an oil change or periodic maintenance alert, offer to schedule next cycle
+      if (targetAlert && /aceite|revisi[oó]n/i.test(targetAlert.description) && car) {
+        const interval = 15000;
+        const nextMileage = car.mileage + interval;
+        const scheduleNext = confirm(
+          `¡Enhorabuena por completar la revisión!\n\n¿Deseas programar automáticamente el próximo cambio de aceite / revisión periódica en +${interval.toLocaleString()} km (a los ${nextMileage.toLocaleString()} km)?`
+        );
+        if (scheduleNext) {
+          try {
+            const created = await apiFetch(`/api/cars/${carId}/alerts`, {
+              method: 'POST',
+              body: JSON.stringify({
+                description: 'Cambio de aceite y revisión periódica (cada 15.000 km)',
+                targetMileage: nextMileage,
+              }),
+            });
+            nextAlerts = [created, ...nextAlerts];
+          } catch (createErr) {
+            console.error('Error auto-scheduling next alert:', createErr);
+          }
+        }
+      }
+
+      setAlerts(nextAlerts);
     } catch (err: any) {
       alert(err.message || 'Error al completar la alerta');
     }
@@ -769,6 +835,10 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
     );
   }
 
+  const isOwner = car.user_id === currentUser?.id;
+  const canEdit = isOwner || car.access === 'editor';
+  const isViewer = !isOwner && car.access === 'viewer';
+
   return (
     <>
       <div className="container animate-fade-in" style={{ paddingBottom: '60px' }}>
@@ -776,6 +846,46 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
       <div className="back-btn" onClick={onBack}>
         <ArrowLeft size={18} /> Volver al Dashboard
       </div>
+
+      {/* Role Banner for Shared Access */}
+      {!isOwner && isViewer && (
+        <div style={{
+          background: 'rgba(59, 130, 246, 0.1)',
+          border: '1px solid rgba(59, 130, 246, 0.25)',
+          borderRadius: 'var(--radius-md)',
+          padding: '12px 18px',
+          marginBottom: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          color: '#93c5fd',
+          fontSize: '0.9rem'
+        }}>
+          <Eye size={20} style={{ flexShrink: 0 }} />
+          <div>
+            <strong>Modo Solo Lectura:</strong> Este vehículo ha sido compartido contigo con permisos de visualización. Puedes consultar el historial, consumos y alertas, pero no modificar datos ni registrar mantenimientos.
+          </div>
+        </div>
+      )}
+      {!isOwner && canEdit && (
+        <div style={{
+          background: 'rgba(16, 185, 129, 0.1)',
+          border: '1px solid rgba(16, 185, 129, 0.25)',
+          borderRadius: 'var(--radius-md)',
+          padding: '12px 18px',
+          marginBottom: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          color: '#86efac',
+          fontSize: '0.9rem'
+        }}>
+          <Edit3 size={18} style={{ flexShrink: 0 }} />
+          <div>
+            <strong>Modo Editor:</strong> Tienes permisos de edición sobre este vehículo compartido. Puedes registrar mantenimientos, repostajes, programar alertas y editar los datos técnicos del coche.
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px', marginBottom: '32px' }}>
         <div>
@@ -786,11 +896,43 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
             <span style={{ color: 'var(--text-secondary)' }}>Año {car.year}</span>
             <span style={{ color: 'var(--text-muted)' }}>|</span>
             <span style={{ color: 'var(--text-secondary)' }}>Color: {car.color || 'N/E'}</span>
+            {isOwner ? (
+              <span style={{
+                fontSize: '0.8rem',
+                padding: '2px 8px',
+                borderRadius: '12px',
+                fontWeight: 600,
+                background: 'rgba(138, 43, 226, 0.15)',
+                color: 'var(--primary)',
+                border: '1px solid rgba(138, 43, 226, 0.3)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}>
+                <Shield size={12} /> Propietario
+              </span>
+            ) : (
+              <span style={{
+                fontSize: '0.8rem',
+                padding: '2px 8px',
+                borderRadius: '12px',
+                fontWeight: 600,
+                background: canEdit ? 'rgba(16, 185, 129, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                color: canEdit ? 'var(--success)' : '#60a5fa',
+                border: `1px solid ${canEdit ? 'rgba(16, 185, 129, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}>
+                {canEdit ? <Edit3 size={12} /> : <Eye size={12} />}
+                {canEdit ? 'Rol: Editor' : 'Rol: Visualizador'}
+              </span>
+            )}
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          {activeTab === 'maintenance' && (
+          {activeTab === 'maintenance' && canEdit && (
             <button className="btn-primary" onClick={() => {
               setMileage(car.mileage);
               setShowMaintModal(true);
@@ -798,12 +940,12 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
               <Plus size={18} /> Registrar Mantenimiento
             </button>
           )}
-          {activeTab === 'alerts' && (
+          {activeTab === 'alerts' && canEdit && (
             <button className="btn-primary" onClick={() => setShowAlertModal(true)}>
               <Bell size={18} /> Programar Alerta
             </button>
           )}
-          {activeTab === 'fuel' && (
+          {activeTab === 'fuel' && canEdit && (
             <button className="btn-primary" onClick={() => {
               setFuelMileage(car.mileage);
               setShowFuelModal(true);
@@ -811,7 +953,7 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
               <Fuel size={18} /> Registrar Repostaje
             </button>
           )}
-          {car.user_id === currentUser?.id && (
+          {canEdit && (
             <button className="btn-secondary" onClick={openEditCarModal}>
               <Edit3 size={18} /> Editar Detalles
             </button>
@@ -884,14 +1026,16 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
         >
           ⛽ Consumo de Combustible
         </button>
-        <button 
-          type="button" 
-          className={`btn ${activeTab === 'share' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => setActiveTab('share')}
-          style={{ padding: '8px 16px', fontSize: '0.9rem' }}
-        >
-          👥 Compartir Acceso
-        </button>
+        {isOwner && (
+          <button 
+            type="button" 
+            className={`btn ${activeTab === 'share' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveTab('share')}
+            style={{ padding: '8px 16px', fontSize: '0.9rem' }}
+          >
+            👥 Compartir Acceso
+          </button>
+        )}
       </div>
 
       {/* Main Section: Two-Column Layout */}
@@ -939,22 +1083,26 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span className="timeline-cost">{Number(maint.cost).toFixed(2)} €</span>
-                          <button 
-                            className="btn-secondary" 
-                            style={{ padding: '6px', background: 'transparent', borderColor: 'transparent', color: 'var(--text-primary)' }}
-                            onClick={() => openEditMaintenance(maint)}
-                            title="Editar mantenimiento"
-                          >
-                            <Edit3 size={15} />
-                          </button>
-                          <button 
-                            className="btn-secondary" 
-                            style={{ padding: '6px', background: 'transparent', borderColor: 'transparent', color: 'var(--text-muted)' }}
-                            onClick={() => handleDeleteMaintenance(maint.id)}
-                            title="Eliminar mantenimiento"
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          {canEdit && (
+                            <>
+                              <button 
+                                className="btn-secondary" 
+                                style={{ padding: '6px', background: 'transparent', borderColor: 'transparent', color: 'var(--text-primary)' }}
+                                onClick={() => openEditMaintenance(maint)}
+                                title="Editar mantenimiento"
+                              >
+                                <Edit3 size={15} />
+                              </button>
+                              <button 
+                                className="btn-secondary" 
+                                style={{ padding: '6px', background: 'transparent', borderColor: 'transparent', color: 'var(--text-muted)' }}
+                                onClick={() => handleDeleteMaintenance(maint.id)}
+                                title="Eliminar mantenimiento"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -1045,12 +1193,90 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
           {/* TAB 2: DETAILED PREDICTIVE ALERTS */}
           {activeTab === 'alerts' && (
             <div className="animate-fade-in">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '10px' }}>
-                <h3 style={{ fontSize: '1.5rem', margin: 0 }}>Recordatorios e Hitos Predictivos</h3>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '10px' }}>                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                   Media estimada: <strong>{getAverageDailyMileage().toFixed(1)} km/día</strong>
                 </span>
               </div>
+
+              {/* Default Customizable Periodic Oil & Maintenance Milestone */}
+              {canEdit && !alerts.some(a => !a.is_completed && /aceite|revisi[oó]n/i.test(a.description)) && (
+                <div 
+                  className="glass-card" 
+                  style={{ 
+                    padding: '22px 24px', 
+                    marginBottom: '24px', 
+                    border: '1px solid rgba(138, 43, 226, 0.35)', 
+                    background: 'linear-gradient(135deg, rgba(138, 43, 226, 0.12), rgba(59, 130, 246, 0.08))',
+                    borderRadius: 'var(--radius-lg)',
+                    boxShadow: '0 8px 32px rgba(138, 43, 226, 0.15)'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                    <div style={{ flex: '1', minWidth: '280px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '1.4rem' }}>🛢️</span>
+                        <h4 style={{ margin: 0, fontSize: '1.2rem', color: '#f3e8ff', fontWeight: 800 }}>
+                          Hito Predictivo: Cambio de Aceite y Revisión Periódica
+                        </h4>
+                      </div>
+                      <p style={{ margin: '0 0 14px 0', fontSize: '0.9rem', color: 'var(--text-secondary)', maxWidth: '680px', lineHeight: '1.5' }}>
+                        Alerta predictiva configurable para tu <strong>{car.brand} {car.model}</strong>. Elige el intervalo deseado (10.000 o 15.000 km) y se calculará automáticamente el kilometraje objetivo. Al marcarla como hecha, se te ofrecerá renovar el ciclo automáticamente.
+                      </p>
+
+                      {/* Interval selector */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>Intervalo:</span>
+                        <button
+                          type="button"
+                          className={`btn ${oilInterval === 10000 ? 'btn-primary' : 'btn-secondary'}`}
+                          style={{ padding: '6px 14px', fontSize: '0.82rem', borderRadius: '20px' }}
+                          onClick={() => setOilInterval(10000)}
+                        >
+                          Cada 10.000 km
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn ${oilInterval === 15000 ? 'btn-primary' : 'btn-secondary'}`}
+                          style={{ padding: '6px 14px', fontSize: '0.82rem', borderRadius: '20px' }}
+                          onClick={() => setOilInterval(15000)}
+                        >
+                          Cada 15.000 km
+                        </button>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>o</span>
+                          <input
+                            type="number"
+                            className="form-control"
+                            placeholder="Otro (km)"
+                            style={{ width: '110px', padding: '5px 10px', fontSize: '0.82rem', margin: 0, borderRadius: '8px' }}
+                            value={oilInterval !== 10000 && oilInterval !== 15000 ? oilInterval : ''}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              if (val > 0) setOilInterval(val);
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '10px' }}>
+                      <div style={{ textAlign: 'right', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                        Odómetro actual: <strong>{car.mileage.toLocaleString()} km</strong><br />
+                        Próxima revisión en: <strong style={{ color: 'var(--primary)', fontSize: '1.05rem' }}>{(car.mileage + (oilInterval || 15000)).toLocaleString()} km</strong>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        disabled={creatingOilAlert}
+                        onClick={() => handleCreateDefaultOilAlert(oilInterval || 15000)}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', padding: '10px 18px', borderRadius: '8px' }}
+                      >
+                        {creatingOilAlert ? 'Configurando...' : '⚡ Activar Alerta Periódica'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {alerts.length === 0 ? (
                 <div className="glass-card empty-state" style={{ padding: '40px 20px' }}>
@@ -1059,9 +1285,11 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                   <p style={{ maxWidth: '400px', margin: '0 auto 16px', fontSize: '0.9rem' }}>
                     Configura avisos por kilometraje o fecha para recibir avisos proactivos cuando toque cambiar piezas o pasar la ITV.
                   </p>
-                  <button className="btn-primary" onClick={() => setShowAlertModal(true)}>
-                    + Crear mi primer aviso
-                  </button>
+                  {canEdit && (
+                    <button className="btn-primary" onClick={() => setShowAlertModal(true)}>
+                      + Crear aviso personalizado
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1075,6 +1303,7 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                         {alerts.filter(a => !a.is_completed).map((alert) => {
                           const status = getAlertStatus(alert, car.mileage);
                           const dailyKm = getAverageDailyMileage();
+                          const isOilAlert = /aceite|revisi[oó]n/i.test(alert.description);
                           
                           // Predictive estimation calculation
                           let predictionText = '';
@@ -1103,9 +1332,24 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                               style={{ display: 'flex', flexDirection: 'column', justifySelf: 'stretch', transform: 'none', boxShadow: 'none' }}
                             >
                               <div style={{ flex: 1 }}>
-                                <span className="alert-status-label" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '8px' }}>
-                                  {status.label}
-                                </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                                  <span className="alert-status-label" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                                    {status.label}
+                                  </span>
+                                  {isOilAlert && (
+                                    <span style={{
+                                      fontSize: '0.72rem',
+                                      padding: '2px 8px',
+                                      borderRadius: '12px',
+                                      fontWeight: 600,
+                                      background: 'rgba(138, 43, 226, 0.15)',
+                                      color: 'var(--primary)',
+                                      border: '1px solid rgba(138, 43, 226, 0.3)'
+                                    }}>
+                                      🔄 Ciclo Periódico
+                                    </span>
+                                  )}
+                                </div>
                                 <h4 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 12px 0' }}>{alert.description}</h4>
                                 
                                 <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -1141,28 +1385,30 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                                 )}
                               </div>
 
-                              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px' }}>
-                                <button 
-                                  className="btn-secondary"
-                                  style={{ 
-                                    padding: '6px 12px', 
-                                    fontSize: '0.8rem', 
-                                    background: 'rgba(16, 185, 129, 0.05)', 
-                                    borderColor: 'rgba(16, 185, 129, 0.15)',
-                                    color: 'var(--success)'
-                                  }}
-                                  onClick={() => handleCompleteAlert(alert.id)}
-                                >
-                                  <Check size={14} /> Hecho
-                                </button>
-                                <button 
-                                  className="btn-secondary"
-                                  style={{ padding: '6px 8px', color: 'var(--danger)', background: 'transparent', borderColor: 'transparent' }}
-                                  onClick={() => handleDeleteAlert(alert.id)}
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
+                              {canEdit && (
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px' }}>
+                                  <button 
+                                    className="btn-secondary"
+                                    style={{ 
+                                      padding: '6px 12px', 
+                                      fontSize: '0.8rem', 
+                                      background: 'rgba(16, 185, 129, 0.05)', 
+                                      borderColor: 'rgba(16, 185, 129, 0.15)',
+                                      color: 'var(--success)'
+                                    }}
+                                    onClick={() => handleCompleteAlert(alert.id)}
+                                  >
+                                    <Check size={14} /> Hecho
+                                  </button>
+                                  <button 
+                                    className="btn-secondary" 
+                                    style={{ padding: '6px 8px', color: 'var(--danger)', background: 'transparent', borderColor: 'transparent' }}
+                                    onClick={() => handleDeleteAlert(alert.id)}
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -1201,13 +1447,15 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                                 {alert.target_mileage && <span>Kilómetros: {alert.target_mileage.toLocaleString()} km</span>}
                               </div>
                             </div>
-                            <button 
-                              className="btn-secondary"
-                              style={{ padding: '6px', color: 'var(--danger)', background: 'transparent', borderColor: 'transparent' }}
-                              onClick={() => handleDeleteAlert(alert.id)}
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                            {canEdit && (
+                              <button 
+                                className="btn-secondary" 
+                                style={{ padding: '6px', color: 'var(--danger)', background: 'transparent', borderColor: 'transparent' }}
+                                onClick={() => handleDeleteAlert(alert.id)}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -1330,7 +1578,7 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                         <th style={{ padding: '10px' }}>Total Coste</th>
                         <th style={{ padding: '10px' }}>Depósito</th>
                         <th style={{ padding: '10px' }}>Consumo</th>
-                        <th style={{ padding: '10px', textAlign: 'right' }}>Acciones</th>
+                        {canEdit && <th style={{ padding: '10px', textAlign: 'right' }}>Acciones</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -1357,15 +1605,17 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                           <td style={{ padding: '10px', fontWeight: 700, color: 'var(--success)' }}>
                             {log.consumption ? `${log.consumption.toFixed(2)} L/100` : '-'}
                           </td>
-                          <td style={{ padding: '10px', textAlign: 'right' }}>
-                            <button 
-                              className="btn-secondary"
-                              style={{ padding: '6px', color: 'var(--danger)', background: 'transparent', borderColor: 'transparent' }}
-                              onClick={() => handleDeleteFuelLog(log.id)}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </td>
+                          {canEdit && (
+                            <td style={{ padding: '10px', textAlign: 'right' }}>
+                              <button 
+                                className="btn-secondary"
+                                style={{ padding: '6px', color: 'var(--danger)', background: 'transparent', borderColor: 'transparent' }}
+                                onClick={() => handleDeleteFuelLog(log.id)}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -1390,17 +1640,28 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
 
                   <div className="glass-card" style={{ padding: '24px', marginBottom: '28px', border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(255, 255, 255, 0.02)' }}>
                     <h4 style={{ margin: '0 0 16px 0', fontSize: '1.1rem' }}>Compartir con un nuevo usuario</h4>
-                    <form onSubmit={handleShareCar} style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                      <div className="form-group" style={{ flex: '1', minWidth: '250px', marginBottom: 0 }}>
+                    <form onSubmit={handleShareCar} style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <div className="form-group" style={{ flex: '1', minWidth: '220px', marginBottom: 0 }}>
                         <input
                           type="text"
                           className="form-control"
-                          placeholder="Nombre de usuario o correo electrónico del destinatario..."
+                          placeholder="Nombre de usuario o correo electrónico..."
                           value={shareIdentifier}
                           onChange={(e) => setShareIdentifier(e.target.value)}
                           required
                           style={{ margin: 0 }}
                         />
+                      </div>
+                      <div className="form-group" style={{ minWidth: '220px', marginBottom: 0 }}>
+                        <select
+                          className="form-control"
+                          value={shareRole}
+                          onChange={(e) => setShareRole(e.target.value as 'editor' | 'viewer')}
+                          style={{ margin: 0 }}
+                        >
+                          <option value="editor">✏️ Rol Editor (Ver y editar)</option>
+                          <option value="viewer">👁️ Rol Visualizador (Solo lectura)</option>
+                        </select>
                       </div>
                       <button 
                         type="submit" 
@@ -1435,8 +1696,9 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                       <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                         <thead>
                           <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
-                            <th style={{ padding: '12px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Nombre de usuario</th>
+                            <th style={{ padding: '12px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Usuario</th>
                             <th style={{ padding: '12px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Email</th>
+                            <th style={{ padding: '12px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Rol</th>
                             <th style={{ padding: '12px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', textAlign: 'right' }}>Acciones</th>
                           </tr>
                         </thead>
@@ -1445,15 +1707,42 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
                             <tr key={sharedUser.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: '0.9rem' }}>
                               <td style={{ padding: '12px 16px', fontWeight: 600 }}>{sharedUser.username}</td>
                               <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{sharedUser.email}</td>
+                              <td style={{ padding: '12px 16px' }}>
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '4px 10px',
+                                  borderRadius: '12px',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 600,
+                                  background: sharedUser.can_edit ? 'rgba(16, 185, 129, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                                  color: sharedUser.can_edit ? 'var(--success)' : '#60a5fa',
+                                  border: `1px solid ${sharedUser.can_edit ? 'rgba(16, 185, 129, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`
+                                }}>
+                                  {sharedUser.can_edit ? '✏️ Editor' : '👁️ Visualizador'}
+                                </span>
+                              </td>
                               <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                                <button
-                                  type="button"
-                                  className="btn-secondary"
-                                  style={{ padding: '6px 12px', color: 'var(--danger)', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
-                                  onClick={() => handleUnshareCar(sharedUser.id)}
-                                >
-                                  <Trash2 size={12} /> Revocar Acceso
-                                </button>
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                                  <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    style={{ padding: '6px 12px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                    onClick={() => handleToggleShareRole(sharedUser.id, sharedUser.can_edit)}
+                                    title={sharedUser.can_edit ? 'Cambiar a Solo lectura' : 'Cambiar a Editor'}
+                                  >
+                                    {sharedUser.can_edit ? 'Cambiar a Visualizador' : 'Cambiar a Editor'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    style={{ padding: '6px 12px', color: 'var(--danger)', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem' }}
+                                    onClick={() => handleUnshareCar(sharedUser.id)}
+                                  >
+                                    <Trash2 size={12} /> Revocar
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))}
@@ -2018,6 +2307,64 @@ export const CarDetail: React.FC<CarDetailProps> = ({ carId, onBack }) => {
             </div>
 
             <form onSubmit={handleAddAlert}>
+              <div style={{ marginBottom: '18px', padding: '12px 14px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'block', marginBottom: '8px', fontWeight: 600 }}>
+                  ⚡ Plantillas rápidas (haz clic para autocompletar):
+                </label>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{ fontSize: '0.78rem', padding: '5px 10px', borderRadius: '16px' }}
+                    onClick={() => {
+                      setAlertDesc('Cambio de aceite y filtro (cada 10.000 km)');
+                      setAlertTargetMileage(String((car?.mileage || 0) + 10000));
+                      setAlertTargetDate('');
+                    }}
+                  >
+                    🛢️ Aceite (10.000 km)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{ fontSize: '0.78rem', padding: '5px 10px', borderRadius: '16px' }}
+                    onClick={() => {
+                      setAlertDesc('Cambio de aceite y revisión periódica (cada 15.000 km)');
+                      setAlertTargetMileage(String((car?.mileage || 0) + 15000));
+                      setAlertTargetDate('');
+                    }}
+                  >
+                    🛢️ Aceite (15.000 km)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{ fontSize: '0.78rem', padding: '5px 10px', borderRadius: '16px' }}
+                    onClick={() => {
+                      setAlertDesc('Revisión general y niveles anual');
+                      const nextYear = new Date();
+                      nextYear.setFullYear(nextYear.getFullYear() + 1);
+                      setAlertTargetDate(nextYear.toISOString().split('T')[0]);
+                    }}
+                  >
+                    🔍 Revisión Anual
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{ fontSize: '0.78rem', padding: '5px 10px', borderRadius: '16px' }}
+                    onClick={() => {
+                      setAlertDesc('Inspección Técnica de Vehículos (ITV)');
+                      const nextYear = new Date();
+                      nextYear.setFullYear(nextYear.getFullYear() + 1);
+                      setAlertTargetDate(nextYear.toISOString().split('T')[0]);
+                    }}
+                  >
+                    🛡️ ITV Oficial
+                  </button>
+                </div>
+              </div>
+
               <div className="form-group">
                 <label htmlFor="alert-desc">Descripción del recordatorio *</label>
                 <input

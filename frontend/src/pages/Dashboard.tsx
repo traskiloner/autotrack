@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Car, Trash2, Milestone, Calendar, Palette, Loader2, AlertTriangle } from 'lucide-react';
+import { Plus, Car, Trash2, Milestone, Calendar, Palette, Loader2, AlertTriangle, Edit3, Eye } from 'lucide-react';
 import { CarData, AlertData, MaintenanceData } from '@autotrack/shared';
 
 interface DashboardProps {
@@ -350,18 +350,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectCar }) => {
                         </div>
                         <div className="car-subtitle">Año {car.year}</div>
                         {car.user_id !== currentUser?.id && car.user && (
-                          <div style={{ 
-                            fontSize: '0.75rem', 
-                            background: 'rgba(59, 130, 246, 0.1)', 
-                            color: '#60a5fa', 
-                            border: '1px solid rgba(59, 130, 246, 0.2)', 
-                            padding: '2px 8px', 
-                            borderRadius: '12px', 
-                            fontWeight: 600,
-                            display: 'inline-block',
-                            marginTop: '4px'
-                          }}>
-                            Compartido por {car.user.username}
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '6px', flexWrap: 'wrap' }}>
+                            <span style={{ 
+                              fontSize: '0.72rem', 
+                              background: 'rgba(59, 130, 246, 0.1)', 
+                              color: '#60a5fa', 
+                              border: '1px solid rgba(59, 130, 246, 0.2)', 
+                              padding: '2px 8px', 
+                              borderRadius: '12px', 
+                              fontWeight: 600,
+                              display: 'inline-block'
+                            }}>
+                              Compartido por {car.user.username}
+                            </span>
+                            <span style={{
+                              fontSize: '0.72rem',
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              fontWeight: 600,
+                              background: car.access === 'editor' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                              color: car.access === 'editor' ? 'var(--success)' : '#94a3b8',
+                              border: `1px solid ${car.access === 'editor' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(148, 163, 184, 0.3)'}`,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              {car.access === 'editor' ? <Edit3 size={11} /> : <Eye size={11} />}
+                              {car.access === 'editor' ? 'Editor' : 'Visualizador'}
+                            </span>
                           </div>
                         )}
                       </div>
